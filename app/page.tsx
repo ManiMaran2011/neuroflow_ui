@@ -30,7 +30,7 @@ export default function Home() {
   /* ================= FORCE LOGIN ON RELOAD ================= */
 
   useEffect(() => {
-    setToken(null); // 🔥 always start from login page
+    setToken(null);
   }, []);
 
   /* ================= LOGIN ================= */
@@ -66,7 +66,7 @@ export default function Home() {
     setXpGained(exec.xp_gained ?? 15);
   }
 
-  /* ================= MIC (6 SECONDS) ================= */
+  /* ================= MIC ================= */
 
   async function startRecording() {
     if (!token) return;
@@ -84,11 +84,14 @@ export default function Home() {
       const formData = new FormData();
       formData.append("file", blob);
 
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE}/voice/transcribe`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
-        body: formData,
-      });
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_API_BASE}/voice/transcribe`,
+        {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}` },
+          body: formData,
+        }
+      );
 
       const data = await res.json();
       if (data.text) setInput(data.text);
@@ -129,7 +132,35 @@ export default function Home() {
           </button>
 
           <div className="flex justify-center">
-            <GoogleLogin onSuccess={() => {}} />
+            <GoogleLogin
+              ux_mode="redirect"
+              onSuccess={(credentialResponse) => {
+                if (!credentialResponse.credential) return;
+
+                fetch(`${process.env.NEXT_PUBLIC_API_BASE}/auth/google`, {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                  },
+                  body: JSON.stringify({
+                    id_token: credentialResponse.credential,
+                  }),
+                })
+                  .then((res) => {
+                    if (!res.ok) throw new Error("Google auth failed");
+                    return res.json();
+                  })
+                  .then((data) => {
+                    setToken(data.access_token);
+                  })
+                  .catch((err) => {
+                    console.error("Google login error:", err);
+                  });
+              }}
+              onError={() => {
+                console.log("Google Login Failed");
+              }}
+            />
           </div>
         </div>
       </main>
@@ -181,8 +212,6 @@ export default function Home() {
           )}
         </div>
 
-        {/* ================= AGENTS ================= */}
-
         <AnimatePresence>
           {plan && (
             <motion.div
@@ -217,8 +246,6 @@ export default function Home() {
           )}
         </AnimatePresence>
 
-        {/* ================= EXECUTION TIMELINE ================= */}
-
         {execution && (
           <div className="mt-12">
             <h3 className="text-xl mb-4">📜 Execution Timeline</h3>
@@ -231,20 +258,8 @@ export default function Home() {
                 </div>
               ))}
             </div>
-
-            <div className="mt-6 flex gap-6">
-              <div className="p-4 rounded-xl bg-slate-900 border border-slate-700">
-                💰 Cost: <strong>${execution.estimated_cost}</strong>
-              </div>
-
-              <div className="p-4 rounded-xl bg-slate-900 border border-slate-700">
-                🔢 Tokens: <strong>{execution.estimated_tokens}</strong>
-              </div>
-            </div>
           </div>
         )}
-
-        {/* ================= XP POP ================= */}
 
         <AnimatePresence>
           {xpGained && (
@@ -263,6 +278,7 @@ export default function Home() {
     </main>
   );
 }
+
 
 
 
