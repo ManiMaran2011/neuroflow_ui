@@ -84,7 +84,7 @@ export default function Home() {
       const formData = new FormData();
       formData.append("file", blob);
 
-      const res = await fetch("${process.env.NEXT_PUBLIC_API_BASE}/voice/transcribe", {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE}/voice/transcribe`, {
         method: "POST",
         headers: { Authorization: `Bearer ${token}` },
         body: formData,
