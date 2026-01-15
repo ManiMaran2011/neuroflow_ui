@@ -132,8 +132,8 @@ export default function Home() {
           </button>
 
           <div className="flex justify-center">
+            {/* ✅ FIXED GOOGLE LOGIN (POPUP MODE) */}
             <GoogleLogin
-              ux_mode="redirect"
               onSuccess={(credentialResponse) => {
                 if (!credentialResponse.credential) return;
 
@@ -146,8 +146,11 @@ export default function Home() {
                     id_token: credentialResponse.credential,
                   }),
                 })
-                  .then((res) => {
-                    if (!res.ok) throw new Error("Google auth failed");
+                  .then(async (res) => {
+                    if (!res.ok) {
+                      const err = await res.text();
+                      throw new Error(err);
+                    }
                     return res.json();
                   })
                   .then((data) => {
@@ -278,6 +281,7 @@ export default function Home() {
     </main>
   );
 }
+
 
 
 
