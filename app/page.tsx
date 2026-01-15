@@ -1,65 +1,285 @@
-import Image from "next/image";
+"use client";
+
+import { useState, useRef, useEffect } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { GoogleLogin } from "@react-oauth/google";
+import {
+  login,
+  ask,
+  approveExecution,
+  getExecution,
+} from "../lib/api";
 
 export default function Home() {
-  return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+  /* ================= STATE ================= */
+
+  const [token, setToken] = useState<string | null>(null);
+  const [email, setEmail] = useState("");
+  const [input, setInput] = useState("");
+
+  const [plan, setPlan] = useState<any>(null);
+  const [executionId, setExecutionId] = useState<string | null>(null);
+  const [execution, setExecution] = useState<any>(null);
+
+  const [recording, setRecording] = useState(false);
+  const [xpGained, setXpGained] = useState<number | null>(null);
+
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+
+  /* ================= FORCE LOGIN ON RELOAD ================= */
+
+  useEffect(() => {
+    setToken(null); // 🔥 always start from login page
+  }, []);
+
+  /* ================= LOGIN ================= */
+
+  async function handleLogin() {
+    if (!email) return;
+    const res = await login(email);
+    setToken(res.access_token);
+  }
+
+  /* ================= ASK ================= */
+
+  async function handleAsk() {
+    if (!token || !input) return;
+
+    const res = await ask(token, input);
+
+    setPlan(res.execution_plan);
+    setExecutionId(res.execution_id);
+    setExecution(null);
+    setXpGained(null);
+  }
+
+  /* ================= APPROVE ================= */
+
+  async function handleApprove() {
+    if (!token || !executionId) return;
+
+    await approveExecution(token, executionId);
+    const exec = await getExecution(token, executionId);
+
+    setExecution(exec);
+    setXpGained(exec.xp_gained ?? 15);
+  }
+
+  /* ================= MIC (6 SECONDS) ================= */
+
+  async function startRecording() {
+    if (!token) return;
+
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const recorder = new MediaRecorder(stream, { mimeType: "audio/webm" });
+
+    mediaRecorderRef.current = recorder;
+    chunksRef.current = [];
+
+    recorder.ondataavailable = (e) => chunksRef.current.push(e.data);
+
+    recorder.onstop = async () => {
+      const blob = new Blob(chunksRef.current, { type: "audio/webm" });
+      const formData = new FormData();
+      formData.append("file", blob);
+
+      const res = await fetch("http://127.0.0.1:8000/voice/transcribe", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      });
+
+      const data = await res.json();
+      if (data.text) setInput(data.text);
+
+      setRecording(false);
+    };
+
+    recorder.start();
+    setRecording(true);
+
+    setTimeout(() => {
+      recorder.stop();
+      stream.getTracks().forEach((t) => t.stop());
+    }, 6000);
+  }
+
+  /* ================= LOGIN SCREEN ================= */
+
+  if (!token) {
+    return (
+      <main className="min-h-screen flex items-center justify-center bg-black text-slate-200">
+        <div className="w-[420px] p-8 rounded-2xl border border-slate-700 bg-slate-950 shadow-[0_0_40px_rgba(34,211,238,0.25)]">
+          <h1 className="text-2xl font-bold mb-2">🧠 NeuroFlow OS</h1>
+          <p className="text-slate-400 mb-6">Agentic AI Execution System</p>
+
+          <input
+            placeholder="Email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className="w-full mb-4 p-3 rounded-lg bg-slate-900 border border-slate-600"
+          />
+
+          <button
+            onClick={handleLogin}
+            className="w-full p-3 rounded-lg bg-cyan-400 text-black font-semibold mb-6"
           >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+            Login
+          </button>
+
+          <div className="flex justify-center">
+            <GoogleLogin onSuccess={() => {}} />
+          </div>
         </div>
       </main>
-    </div>
+    );
+  }
+
+  /* ================= MAIN UI ================= */
+
+  return (
+    <main className="min-h-screen bg-black text-slate-200 p-10">
+      <div className="max-w-4xl mx-auto">
+
+        <h1 className="text-3xl font-bold mb-2">🧠 NeuroFlow OS</h1>
+        <p className="text-slate-400 mb-6">
+          Speak → Plan → Approve → Execute
+        </p>
+
+        <textarea
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          placeholder="Type or speak your command..."
+          className="w-full h-28 p-4 rounded-xl bg-slate-900 border border-slate-700 mb-4"
+        />
+
+        <div className="flex items-center gap-4">
+          <button
+            onClick={handleAsk}
+            className="px-6 py-3 rounded-xl bg-cyan-400 text-black font-semibold"
+          >
+            Execute
+          </button>
+
+          <button
+            onClick={startRecording}
+            disabled={recording}
+            className={`p-3 rounded-full ${
+              recording
+                ? "bg-red-500"
+                : "border border-cyan-400 text-cyan-400"
+            }`}
+          >
+            🎤
+          </button>
+
+          {recording && (
+            <span className="text-red-400 animate-pulse">
+              Listening…
+            </span>
+          )}
+        </div>
+
+        {/* ================= AGENTS ================= */}
+
+        <AnimatePresence>
+          {plan && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="mt-10"
+            >
+              <h3 className="text-xl mb-4">🤖 Agents Executing</h3>
+
+              <div className="grid grid-cols-2 gap-4">
+                {plan.agents.map((agent: string, i: number) => (
+                  <motion.div
+                    key={agent}
+                    initial={{ x: -40, opacity: 0 }}
+                    animate={{ x: 0, opacity: 1 }}
+                    transition={{ delay: i * 0.15 }}
+                    className="p-4 rounded-xl bg-slate-900 border border-slate-700 shadow-[0_0_20px_rgba(34,211,238,0.15)]"
+                  >
+                    <strong>{agent}</strong>
+                    <p className="text-slate-400 text-sm">Executing</p>
+                  </motion.div>
+                ))}
+              </div>
+
+              <button
+                onClick={handleApprove}
+                className="mt-6 px-6 py-3 rounded-xl bg-green-400 text-black font-semibold"
+              >
+                Approve & Execute
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* ================= EXECUTION TIMELINE ================= */}
+
+        {execution && (
+          <div className="mt-12">
+            <h3 className="text-xl mb-4">📜 Execution Timeline</h3>
+
+            <div className="bg-slate-950 border border-slate-700 rounded-xl p-4 font-mono text-sm space-y-2">
+              {execution.timeline.map((t: any, i: number) => (
+                <div key={i}>
+                  <span className="text-cyan-400">›</span>{" "}
+                  {t.message}
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-6 flex gap-6">
+              <div className="p-4 rounded-xl bg-slate-900 border border-slate-700">
+                💰 Cost: <strong>${execution.estimated_cost}</strong>
+              </div>
+
+              <div className="p-4 rounded-xl bg-slate-900 border border-slate-700">
+                🔢 Tokens: <strong>{execution.estimated_tokens}</strong>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ================= XP POP ================= */}
+
+        <AnimatePresence>
+          {xpGained && (
+            <motion.div
+              initial={{ scale: 0 }}
+              animate={{ scale: 1.2 }}
+              exit={{ opacity: 0 }}
+              className="fixed bottom-10 right-10 px-6 py-4 rounded-xl bg-purple-500 text-black font-bold shadow-lg"
+            >
+              +{xpGained} XP 🚀
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+      </div>
+    </main>
   );
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
