@@ -132,37 +132,24 @@ export default function Home() {
           </button>
 
           <div className="flex justify-center">
-            {/* ✅ FIXED GOOGLE LOGIN (POPUP MODE) */}
             <GoogleLogin
+              ux_mode="redirect"
               onSuccess={(credentialResponse) => {
                 if (!credentialResponse.credential) return;
 
                 fetch(`${process.env.NEXT_PUBLIC_API_BASE}/auth/google`, {
                   method: "POST",
-                  headers: {
-                    "Content-Type": "application/json",
-                  },
+                  headers: { "Content-Type": "application/json" },
                   body: JSON.stringify({
                     id_token: credentialResponse.credential,
                   }),
                 })
-                  .then(async (res) => {
-                    if (!res.ok) {
-                      const err = await res.text();
-                      throw new Error(err);
-                    }
-                    return res.json();
-                  })
+                  .then((res) => res.json())
                   .then((data) => {
                     setToken(data.access_token);
-                  })
-                  .catch((err) => {
-                    console.error("Google login error:", err);
                   });
               }}
-              onError={() => {
-                console.log("Google Login Failed");
-              }}
+              onError={() => console.log("Google Login Failed")}
             />
           </div>
         </div>
@@ -215,6 +202,8 @@ export default function Home() {
           )}
         </div>
 
+        {/* ================= AGENTS ================= */}
+
         <AnimatePresence>
           {plan && (
             <motion.div
@@ -249,6 +238,8 @@ export default function Home() {
           )}
         </AnimatePresence>
 
+        {/* ================= EXECUTION ================= */}
+
         {execution && (
           <div className="mt-12">
             <h3 className="text-xl mb-4">📜 Execution Timeline</h3>
@@ -261,16 +252,44 @@ export default function Home() {
                 </div>
               ))}
             </div>
+
+            {/* ================= METRICS ================= */}
+
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4 }}
+              className="mt-6 grid grid-cols-2 gap-4"
+            >
+              <div className="p-4 rounded-xl bg-slate-900/80 border border-cyan-400/40 shadow-[0_0_20px_rgba(34,211,238,0.25)]">
+                <p className="text-sm text-slate-400">💰 Estimated Cost</p>
+                <p className="text-2xl font-bold text-cyan-400">
+                  ${execution.estimated_cost}
+                </p>
+              </div>
+
+              <div className="p-4 rounded-xl bg-slate-900/80 border border-purple-400/40 shadow-[0_0_20px_rgba(168,85,247,0.25)]">
+                <p className="text-sm text-slate-400">🔢 Tokens Used</p>
+                <p className="text-2xl font-bold text-purple-400">
+                  {execution.estimated_tokens}
+                </p>
+              </div>
+            </motion.div>
           </div>
         )}
+
+        {/* ================= XP POP ================= */}
 
         <AnimatePresence>
           {xpGained && (
             <motion.div
-              initial={{ scale: 0 }}
-              animate={{ scale: 1.2 }}
-              exit={{ opacity: 0 }}
-              className="fixed bottom-10 right-10 px-6 py-4 rounded-xl bg-purple-500 text-black font-bold shadow-lg"
+              initial={{ scale: 0, opacity: 0 }}
+              animate={{ scale: 1.15, opacity: 1 }}
+              exit={{ scale: 0.8, opacity: 0 }}
+              transition={{ type: "spring", stiffness: 260, damping: 18 }}
+              className="fixed bottom-10 right-10 px-6 py-4 rounded-xl 
+                         bg-gradient-to-r from-purple-500 to-pink-500 
+                         text-black font-bold text-xl shadow-[0_0_40px_rgba(168,85,247,0.6)]"
             >
               +{xpGained} XP 🚀
             </motion.div>
@@ -281,15 +300,6 @@ export default function Home() {
     </main>
   );
 }
-
-
-
-
-
-
-
-
-
 
 
 
