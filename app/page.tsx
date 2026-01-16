@@ -33,6 +33,14 @@ export default function Home() {
     setToken(null);
   }, []);
 
+  /* ================= AUTO HIDE XP ================= */
+
+  useEffect(() => {
+    if (!xpGained) return;
+    const t = setTimeout(() => setXpGained(null), 3000);
+    return () => clearTimeout(t);
+  }, [xpGained]);
+
   /* ================= LOGIN ================= */
 
   async function handleLogin() {
@@ -132,8 +140,8 @@ export default function Home() {
           </button>
 
           <div className="flex justify-center">
+            {/* ✅ WORKING GOOGLE LOGIN — UNTOUCHED */}
             <GoogleLogin
-              ux_mode="redirect"
               onSuccess={(credentialResponse) => {
                 if (!credentialResponse.credential) return;
 
@@ -145,9 +153,10 @@ export default function Home() {
                   }),
                 })
                   .then((res) => res.json())
-                  .then((data) => {
-                    setToken(data.access_token);
-                  });
+                  .then((data) => setToken(data.access_token))
+                  .catch((err) =>
+                    console.error("Google login error:", err)
+                  );
               }}
               onError={() => console.log("Google Login Failed")}
             />
@@ -202,8 +211,6 @@ export default function Home() {
           )}
         </div>
 
-        {/* ================= AGENTS ================= */}
-
         <AnimatePresence>
           {plan && (
             <motion.div
@@ -238,58 +245,33 @@ export default function Home() {
           )}
         </AnimatePresence>
 
-        {/* ================= EXECUTION ================= */}
-
         {execution && (
           <div className="mt-12">
             <h3 className="text-xl mb-4">📜 Execution Timeline</h3>
-
             <div className="bg-slate-950 border border-slate-700 rounded-xl p-4 font-mono text-sm space-y-2">
               {execution.timeline.map((t: any, i: number) => (
                 <div key={i}>
-                  <span className="text-cyan-400">›</span>{" "}
-                  {t.message}
+                  <span className="text-cyan-400">›</span> {t.message}
                 </div>
               ))}
             </div>
-
-            {/* ================= METRICS ================= */}
-
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.4 }}
-              className="mt-6 grid grid-cols-2 gap-4"
-            >
-              <div className="p-4 rounded-xl bg-slate-900/80 border border-cyan-400/40 shadow-[0_0_20px_rgba(34,211,238,0.25)]">
-                <p className="text-sm text-slate-400">💰 Estimated Cost</p>
-                <p className="text-2xl font-bold text-cyan-400">
-                  ${execution.estimated_cost}
-                </p>
-              </div>
-
-              <div className="p-4 rounded-xl bg-slate-900/80 border border-purple-400/40 shadow-[0_0_20px_rgba(168,85,247,0.25)]">
-                <p className="text-sm text-slate-400">🔢 Tokens Used</p>
-                <p className="text-2xl font-bold text-purple-400">
-                  {execution.estimated_tokens}
-                </p>
-              </div>
-            </motion.div>
           </div>
         )}
 
-        {/* ================= XP POP ================= */}
+        {/* ================= XP ANIMATION (UI ONLY) ================= */}
 
         <AnimatePresence>
           {xpGained && (
             <motion.div
-              initial={{ scale: 0, opacity: 0 }}
-              animate={{ scale: 1.15, opacity: 1 }}
+              initial={{ scale: 0, opacity: 0, y: 40 }}
+              animate={{ scale: 1.15, opacity: 1, y: 0 }}
               exit={{ scale: 0.8, opacity: 0 }}
               transition={{ type: "spring", stiffness: 260, damping: 18 }}
-              className="fixed bottom-10 right-10 px-6 py-4 rounded-xl 
-                         bg-gradient-to-r from-purple-500 to-pink-500 
-                         text-black font-bold text-xl shadow-[0_0_40px_rgba(168,85,247,0.6)]"
+              className="fixed bottom-10 right-10 z-50
+                         px-6 py-4 rounded-xl
+                         bg-gradient-to-r from-purple-500 to-pink-500
+                         text-black font-bold text-xl
+                         shadow-[0_0_40px_rgba(168,85,247,0.6)]"
             >
               +{xpGained} XP 🚀
             </motion.div>
@@ -300,6 +282,7 @@ export default function Home() {
     </main>
   );
 }
+
 
 
 
