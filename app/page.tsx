@@ -44,10 +44,16 @@ export default function Home() {
   /* ================= LOGIN ================= */
 
   async function handleLogin() {
-    if (!email) return;
-    const res = await login(email);
-    setToken(res.access_token);
-  }
+  if (!email) return;
+
+  const res = await login(email);
+
+  localStorage.setItem("access_token", res.access_token);
+
+  // keep existing state usage
+  setToken(res.access_token);
+}
+
 
   /* ================= ASK ================= */
 
