@@ -27,11 +27,15 @@ export default function Home() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
 
-  /* ================= FORCE LOGIN ON RELOAD ================= */
+  /* ================= LOGIN ON RELOAD ================= */
 
   useEffect(() => {
-    setToken(null);
-  }, []);
+  const storedToken = localStorage.getItem("access_token");
+  if (storedToken) {
+    setToken(storedToken);
+  }
+}, []);
+
 
   /* ================= AUTO HIDE XP ================= */
 
@@ -159,7 +163,11 @@ export default function Home() {
                   }),
                 })
                   .then((res) => res.json())
-                  .then((data) => setToken(data.access_token))
+                  .then((data) => {
+                    localStorage.setItem("access_token", data.access_token);
+                      setToken(data.access_token);
+                })
+
                   .catch((err) =>
                     console.error("Google login error:", err)
                   );
