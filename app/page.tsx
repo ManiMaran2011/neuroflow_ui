@@ -27,15 +27,14 @@ export default function Home() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
 
-  /* ================= LOGIN ON RELOAD ================= */
+  /* ================= RESTORE LOGIN ON RELOAD ================= */
 
   useEffect(() => {
-  const storedToken = localStorage.getItem("access_token");
-  if (storedToken) {
-    setToken(storedToken);
-  }
-}, []);
-
+    const storedToken = localStorage.getItem("access_token");
+    if (storedToken) {
+      setToken(storedToken);
+    }
+  }, []);
 
   /* ================= AUTO HIDE XP ================= */
 
@@ -48,16 +47,36 @@ export default function Home() {
   /* ================= LOGIN ================= */
 
   async function handleLogin() {
-  if (!email) return;
+    if (!email) return;
 
-  const res = await login(email);
+    const res = await login(email);
 
-  localStorage.setItem("access_token", res.access_token);
+    localStorage.setItem("access_token", res.access_token);
+    setToken(res.access_token);
+  }
 
-  // keep existing state usage
-  setToken(res.access_token);
-}
+  /* ================= GOOGLE CALENDAR CONNECT ================= */
 
+  async function connectGoogleCalendar() {
+    if (!token) return;
+
+    const res = await fetch(
+      `${process.env.NEXT_PUBLIC_API_BASE}/oauth/google/connect`,
+      {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      }
+    );
+
+    if (res.redirected) {
+      window.location.href = res.url;
+    } else {
+      const data = await res.json();
+      console.log("OAuth response:", data);
+    }
+  }
 
   /* ================= ASK ================= */
 
@@ -150,27 +169,25 @@ export default function Home() {
           </button>
 
           <div className="flex justify-center">
-            {/* ✅ WORKING GOOGLE LOGIN — UNTOUCHED */}
             <GoogleLogin
-              onSuccess={(credentialResponse) => {
+              onSuccess={async (credentialResponse) => {
                 if (!credentialResponse.credential) return;
 
-                fetch(`${process.env.NEXT_PUBLIC_API_BASE}/auth/google`, {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({
-                    id_token: credentialResponse.credential,
-                  }),
-                })
-                  .then((res) => res.json())
-                  .then((data) => {
-                    localStorage.setItem("access_token", data.access_token);
-                      setToken(data.access_token);
-                })
+                const res = await fetch(
+                  `${process.env.NEXT_PUBLIC_API_BASE}/auth/google`,
+                  {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      id_token: credentialResponse.credential,
+                    }),
+                  }
+                );
 
-                  .catch((err) =>
-                    console.error("Google login error:", err)
-                  );
+                const data = await res.json();
+
+                localStorage.setItem("access_token", data.access_token);
+                setToken(data.access_token);
               }}
               onError={() => console.log("Google Login Failed")}
             />
@@ -190,6 +207,13 @@ export default function Home() {
         <p className="text-slate-400 mb-6">
           Speak → Plan → Approve → Execute
         </p>
+
+        <button
+          onClick={connectGoogleCalendar}
+          className="mb-6 px-4 py-2 rounded-lg bg-blue-500 text-black font-semibold"
+        >
+          Connect Google Calendar
+        </button>
 
         <textarea
           value={input}
@@ -241,7 +265,7 @@ export default function Home() {
                     initial={{ x: -40, opacity: 0 }}
                     animate={{ x: 0, opacity: 1 }}
                     transition={{ delay: i * 0.15 }}
-                    className="p-4 rounded-xl bg-slate-900 border border-slate-700 shadow-[0_0_20px_rgba(34,211,238,0.15)]"
+                    className="p-4 rounded-xl bg-slate-900 border border-slate-700"
                   >
                     <strong>{agent}</strong>
                     <p className="text-slate-400 text-sm">Executing</p>
@@ -255,39 +279,6 @@ export default function Home() {
               >
                 Approve & Execute
               </button>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {execution && (
-          <div className="mt-12">
-            <h3 className="text-xl mb-4">📜 Execution Timeline</h3>
-            <div className="bg-slate-950 border border-slate-700 rounded-xl p-4 font-mono text-sm space-y-2">
-              {execution.timeline.map((t: any, i: number) => (
-                <div key={i}>
-                  <span className="text-cyan-400">›</span> {t.message}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* ================= XP ANIMATION (UI ONLY) ================= */}
-
-        <AnimatePresence>
-          {xpGained && (
-            <motion.div
-              initial={{ scale: 0, opacity: 0, y: 40 }}
-              animate={{ scale: 1.15, opacity: 1, y: 0 }}
-              exit={{ scale: 0.8, opacity: 0 }}
-              transition={{ type: "spring", stiffness: 260, damping: 18 }}
-              className="fixed bottom-10 right-10 z-50
-                         px-6 py-4 rounded-xl
-                         bg-gradient-to-r from-purple-500 to-pink-500
-                         text-black font-bold text-xl
-                         shadow-[0_0_40px_rgba(168,85,247,0.6)]"
-            >
-              +{xpGained} XP 🚀
             </motion.div>
           )}
         </AnimatePresence>
