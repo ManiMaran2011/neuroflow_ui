@@ -55,6 +55,17 @@ export default function Home() {
     setToken(res.access_token);
   }
 
+  /* ================= LOGOUT ================= */
+
+  function handleLogout() {
+    localStorage.removeItem("access_token");
+    setToken(null);
+    setPlan(null);
+    setExecution(null);
+    setExecutionId(null);
+    setInput("");
+  }
+
   /* ================= GOOGLE CALENDAR CONNECT ================= */
 
   async function connectGoogleCalendar() {
@@ -201,8 +212,15 @@ export default function Home() {
 
   return (
     <main className="min-h-screen bg-black text-slate-200 p-10">
-      <div className="max-w-4xl mx-auto">
+      {/* LOGOUT BUTTON */}
+      <button
+        onClick={handleLogout}
+        className="fixed top-4 right-4 px-4 py-2 rounded-lg bg-red-500 text-black font-semibold"
+      >
+        Logout
+      </button>
 
+      <div className="max-w-4xl mx-auto">
         <h1 className="text-3xl font-bold mb-2">🧠 NeuroFlow OS</h1>
         <p className="text-slate-400 mb-6">
           Speak → Plan → Approve → Execute
@@ -282,11 +300,11 @@ export default function Home() {
             </motion.div>
           )}
         </AnimatePresence>
-
       </div>
     </main>
   );
 }
+
 
 
 
