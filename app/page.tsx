@@ -68,22 +68,14 @@ export default function Home() {
 
   /* ================= GOOGLE CALENDAR CONNECT ================= */
 
-  async function connectGoogleCalendar() {
+  function connectGoogleCalendar() {
     if (!token) return;
 
-    const res = await fetch(
-      `${process.env.NEXT_PUBLIC_API_BASE}/oauth/google/connect`,
-      {
-        method: "GET",
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      }
-    );
+    const url = `${process.env.NEXT_PUBLIC_API_BASE}/oauth/google/connect`;
 
-    if (res.redirected) {
-      window.location.href = res.url;
-    } else {
+    window.location.href = `${url}?token=${token}`
+  }
+     else {
       const data = await res.json();
       console.log("OAuth response:", data);
     }
