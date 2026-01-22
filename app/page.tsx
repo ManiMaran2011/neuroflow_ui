@@ -65,16 +65,34 @@ export default function Home() {
     setInput("");
   }
 
-  /* ================= GOOGLE CALENDAR CONNECT ================= */
-  // IMPORTANT: OAuth MUST use browser navigation (no fetch)
+  /* ================= GOOGLE CALENDAR CONNECT (FIXED) ================= */
 
-  function connectGoogleCalendar() {
+  async function connectGoogleCalendar() {
     if (!token) return;
 
-    const base = process.env.NEXT_PUBLIC_API_BASE;
-    const url = `${base}/oauth/google/connect?token=${token}`;
+    const res = await fetch(
+      `${process.env.NEXT_PUBLIC_API_BASE}/oauth/google/connect`,
+      {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      }
+    );
 
-    window.location.href = url;
+    if (!res.ok) {
+      const err = await res.text();
+      console.error("Google OAuth connect failed:", err);
+      return;
+    }
+
+    const data = await res.json();
+
+    if (data.auth_url) {
+      window.location.href = data.auth_url;
+    } else {
+      console.error("No auth_url returned from backend");
+    }
   }
 
   /* ================= ASK ================= */
@@ -290,6 +308,7 @@ export default function Home() {
     </main>
   );
 }
+
 
 
 
