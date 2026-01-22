@@ -74,7 +74,7 @@ export default function Home() {
     const url = `${process.env.NEXT_PUBLIC_API_BASE}/oauth/google/connect`;
 
     window.location.href = `${url}?token=${token}`
-  }
+  
      else {
       const data = await res.json();
       console.log("OAuth response:", data);
