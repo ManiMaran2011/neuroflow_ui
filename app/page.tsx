@@ -50,7 +50,6 @@ export default function Home() {
     if (!email) return;
 
     const res = await login(email);
-
     localStorage.setItem("access_token", res.access_token);
     setToken(res.access_token);
   }
@@ -67,18 +66,15 @@ export default function Home() {
   }
 
   /* ================= GOOGLE CALENDAR CONNECT ================= */
+  // IMPORTANT: OAuth MUST use browser navigation (no fetch)
 
   function connectGoogleCalendar() {
     if (!token) return;
 
-    const url = `${process.env.NEXT_PUBLIC_API_BASE}/oauth/google/connect`;
+    const base = process.env.NEXT_PUBLIC_API_BASE;
+    const url = `${base}/oauth/google/connect?token=${token}`;
 
-    window.location.href = `${url}?token=${token}`
-  
-     else {
-      const data = await res.json();
-      console.log("OAuth response:", data);
-    }
+    window.location.href = url;
   }
 
   /* ================= ASK ================= */
@@ -153,7 +149,7 @@ export default function Home() {
   if (!token) {
     return (
       <main className="min-h-screen flex items-center justify-center bg-black text-slate-200">
-        <div className="w-[420px] p-8 rounded-2xl border border-slate-700 bg-slate-950 shadow-[0_0_40px_rgba(34,211,238,0.25)]">
+        <div className="w-[420px] p-8 rounded-2xl border border-slate-700 bg-slate-950">
           <h1 className="text-2xl font-bold mb-2">🧠 NeuroFlow OS</h1>
           <p className="text-slate-400 mb-6">Agentic AI Execution System</p>
 
@@ -188,7 +184,6 @@ export default function Home() {
                 );
 
                 const data = await res.json();
-
                 localStorage.setItem("access_token", data.access_token);
                 setToken(data.access_token);
               }}
@@ -204,7 +199,6 @@ export default function Home() {
 
   return (
     <main className="min-h-screen bg-black text-slate-200 p-10">
-      {/* LOGOUT BUTTON */}
       <button
         onClick={handleLogout}
         className="fixed top-4 right-4 px-4 py-2 rounded-lg bg-red-500 text-black font-semibold"
@@ -296,6 +290,7 @@ export default function Home() {
     </main>
   );
 }
+
 
 
 
