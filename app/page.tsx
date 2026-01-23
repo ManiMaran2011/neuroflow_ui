@@ -74,7 +74,7 @@ export default function Home() {
       return;
     }
 
-  const base = process.env.NEXT_PUBLIC_API_BASE!;
+  const base = process.env.NEXT_PUBLIC_API_BASE;
   window.location.href = `${base}/oauth/google/connect`;
 }
 
