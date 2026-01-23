@@ -65,7 +65,7 @@ export default function Home() {
     setInput("");
   }
 
-  /* ================= GOOGLE CALENDAR CONNECT (FIXED) ================= */
+  /* ================= GOOGLE CALENDAR CONNECT ================= */
 
   function connectGoogleCalendar() {
     const token = localStorage.getItem("access_token");
@@ -74,8 +74,10 @@ export default function Home() {
       return;
     }
 
-  const base = process.env.NEXT_PUBLIC_API_BASE;
-  window.location.href = `${base}/oauth/google/connect`;
+  const base = process.env.NEXT_PUBLIC_API_BASE!;
+  const redirectUrl = `${base}/oauth/google/connect?token=${token}`;
+
+  window.location.assign(redirectUrl);
 }
 
 
