@@ -57,9 +57,13 @@ export default function Home() {
     fetch(`${process.env.NEXT_PUBLIC_API_BASE}/executions`, {
       headers: { Authorization: `Bearer ${token}` },
     })
-      .then((r) => r.json())
+    .then(async (r) => {
+      if (!r.ok) return [];
+      const data = await r.json();
+      return Array.isArray(data) ? data : [];
+    })  
       .then(setHistory)
-      .catch(() => {});
+      .catch(() => setHistory([]));
   }, [token, execution]);
 
   /* ---------- XP AUTO HIDE ---------- */
