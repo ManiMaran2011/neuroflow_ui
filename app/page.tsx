@@ -10,8 +10,22 @@ import {
   getExecution,
 } from "../lib/api";
 
+/* ================= UTIL ================= */
+
+const agentColor = (agent: string) => {
+  if (agent.includes("Calendar")) return "border-blue-500 text-blue-400";
+  if (agent.includes("Monitor")) return "border-yellow-500 text-yellow-400";
+  if (agent.includes("XP") || agent.includes("Report"))
+    return "border-green-500 text-green-400";
+  if (agent.includes("Notify") || agent.includes("Email"))
+    return "border-purple-500 text-purple-400";
+  return "border-slate-600 text-slate-300";
+};
+
+/* ================= COMPONENT ================= */
+
 export default function Home() {
-  /* ================= STATE ================= */
+  /* ---------- STATE ---------- */
 
   const [token, setToken] = useState<string | null>(null);
   const [email, setEmail] = useState("");
@@ -21,22 +35,34 @@ export default function Home() {
   const [executionId, setExecutionId] = useState<string | null>(null);
   const [execution, setExecution] = useState<any>(null);
 
+  const [history, setHistory] = useState<any[]>([]);
   const [recording, setRecording] = useState(false);
   const [xpGained, setXpGained] = useState<number | null>(null);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
 
-  /* ================= RESTORE LOGIN ON RELOAD ================= */
+  /* ---------- RESTORE LOGIN ---------- */
 
   useEffect(() => {
-    const storedToken = localStorage.getItem("access_token");
-    if (storedToken) {
-      setToken(storedToken);
-    }
+    const stored = localStorage.getItem("access_token");
+    if (stored) setToken(stored);
   }, []);
 
-  /* ================= AUTO HIDE XP ================= */
+  /* ---------- LOAD HISTORY ---------- */
+
+  useEffect(() => {
+    if (!token) return;
+
+    fetch(`${process.env.NEXT_PUBLIC_API_BASE}/executions`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((r) => r.json())
+      .then(setHistory)
+      .catch(() => {});
+  }, [token, execution]);
+
+  /* ---------- XP AUTO HIDE ---------- */
 
   useEffect(() => {
     if (!xpGained) return;
@@ -44,75 +70,54 @@ export default function Home() {
     return () => clearTimeout(t);
   }, [xpGained]);
 
-  /* ================= LOGIN ================= */
+  /* ---------- AUTH ---------- */
 
   async function handleLogin() {
-    if (!email) return;
-
     const res = await login(email);
     localStorage.setItem("access_token", res.access_token);
     setToken(res.access_token);
   }
 
-  /* ================= LOGOUT ================= */
-
   function handleLogout() {
-    localStorage.removeItem("access_token");
+    localStorage.clear();
     setToken(null);
     setPlan(null);
     setExecution(null);
-    setExecutionId(null);
-    setInput("");
   }
 
-  /* ================= GOOGLE CALENDAR CONNECT ================= */
+  /* ---------- GOOGLE CAL ---------- */
 
   function connectGoogleCalendar() {
-    const token = localStorage.getItem("access_token");
-    if (!token){
-      alert("Not logged in");
-      return;
-    }
+    const t = localStorage.getItem("access_token");
+    if (!t) return;
+    window.location.assign(
+      `${process.env.NEXT_PUBLIC_API_BASE}/oauth/google/connect?token=${t}`
+    );
+  }
 
-  const base = process.env.NEXT_PUBLIC_API_BASE!;
-  const redirectUrl = `${base}/oauth/google/connect?token=${token}`;
-
-  window.location.assign(redirectUrl);
-}
-
-
-  /* ================= ASK ================= */
+  /* ---------- ASK ---------- */
 
   async function handleAsk() {
     if (!token || !input) return;
-
     const res = await ask(token, input);
-
     setPlan(res.execution_plan);
     setExecutionId(res.execution_id);
     setExecution(null);
-    setXpGained(null);
   }
-
-  /* ================= APPROVE ================= */
 
   async function handleApprove() {
     if (!token || !executionId) return;
-
     await approveExecution(token, executionId);
     const exec = await getExecution(token, executionId);
-
     setExecution(exec);
-    setXpGained(exec.xp_gained ?? 15);
+    setXpGained(exec.xp_gained ?? 5);
   }
 
-  /* ================= MIC ================= */
+  /* ---------- VOICE ---------- */
 
   async function startRecording() {
-    if (!token) return;
-
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    const recorder = new MediaRecorder(stream, { mimeType: "audio/webm" });
+    const recorder = new MediaRecorder(stream);
 
     mediaRecorderRef.current = recorder;
     chunksRef.current = [];
@@ -120,7 +125,7 @@ export default function Home() {
     recorder.ondataavailable = (e) => chunksRef.current.push(e.data);
 
     recorder.onstop = async () => {
-      const blob = new Blob(chunksRef.current, { type: "audio/webm" });
+      const blob = new Blob(chunksRef.current);
       const formData = new FormData();
       formData.append("file", blob);
 
@@ -135,65 +140,51 @@ export default function Home() {
 
       const data = await res.json();
       if (data.text) setInput(data.text);
-
       setRecording(false);
     };
 
     recorder.start();
     setRecording(true);
-
-    setTimeout(() => {
-      recorder.stop();
-      stream.getTracks().forEach((t) => t.stop());
-    }, 6000);
+    setTimeout(() => recorder.stop(), 5000);
   }
 
-  /* ================= LOGIN SCREEN ================= */
+  /* ---------- LOGIN UI ---------- */
 
   if (!token) {
     return (
-      <main className="min-h-screen flex items-center justify-center bg-black text-slate-200">
-        <div className="w-[420px] p-8 rounded-2xl border border-slate-700 bg-slate-950">
-          <h1 className="text-2xl font-bold mb-2">🧠 NeuroFlow OS</h1>
-          <p className="text-slate-400 mb-6">Agentic AI Execution System</p>
+      <main className="min-h-screen bg-black flex items-center justify-center">
+        <div className="w-[420px] p-8 rounded-2xl bg-slate-950 border border-slate-700 text-slate-200">
+          <h1 className="text-2xl font-bold mb-4">🧠 NeuroFlow OS</h1>
 
           <input
+            className="w-full p-3 rounded bg-slate-900 border border-slate-600 mb-4"
             placeholder="Email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="w-full mb-4 p-3 rounded-lg bg-slate-900 border border-slate-600"
           />
 
           <button
             onClick={handleLogin}
-            className="w-full p-3 rounded-lg bg-cyan-400 text-black font-semibold mb-6"
+            className="w-full p-3 bg-cyan-400 text-black rounded font-semibold mb-4"
           >
             Login
           </button>
 
-          <div className="flex justify-center">
-            <GoogleLogin
-              onSuccess={async (credentialResponse) => {
-                if (!credentialResponse.credential) return;
-
-                const res = await fetch(
-                  `${process.env.NEXT_PUBLIC_API_BASE}/auth/google`,
-                  {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                      id_token: credentialResponse.credential,
-                    }),
-                  }
-                );
-
-                const data = await res.json();
-                localStorage.setItem("access_token", data.access_token);
-                setToken(data.access_token);
-              }}
-              onError={() => console.log("Google Login Failed")}
-            />
-          </div>
+          <GoogleLogin
+            onSuccess={async (cred) => {
+              const res = await fetch(
+                `${process.env.NEXT_PUBLIC_API_BASE}/auth/google`,
+                {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ id_token: cred.credential }),
+                }
+              );
+              const data = await res.json();
+              localStorage.setItem("access_token", data.access_token);
+              setToken(data.access_token);
+            }}
+          />
         </div>
       </main>
     );
@@ -205,96 +196,165 @@ export default function Home() {
     <main className="min-h-screen bg-black text-slate-200 p-10">
       <button
         onClick={handleLogout}
-        className="fixed top-4 right-4 px-4 py-2 rounded-lg bg-red-500 text-black font-semibold"
+        className="fixed top-4 right-4 bg-red-500 text-black px-4 py-2 rounded"
       >
         Logout
       </button>
 
-      <div className="max-w-4xl mx-auto">
-        <h1 className="text-3xl font-bold mb-2">🧠 NeuroFlow OS</h1>
-        <p className="text-slate-400 mb-6">
-          Speak → Plan → Approve → Execute
-        </p>
+      <h1 className="text-3xl font-bold mb-6">🧠 NeuroFlow OS</h1>
 
+      {/* ---------- COMMAND ---------- */}
+
+      <button
+        onClick={connectGoogleCalendar}
+        className="mb-4 bg-blue-500 text-black px-4 py-2 rounded"
+      >
+        Connect Google Calendar
+      </button>
+
+      <textarea
+        className="w-full h-28 p-4 rounded bg-slate-900 border border-slate-700 mb-4"
+        value={input}
+        onChange={(e) => setInput(e.target.value)}
+        placeholder="Type or speak a command..."
+      />
+
+      <div className="flex gap-4 items-center">
         <button
-          onClick={connectGoogleCalendar}
-          className="mb-6 px-4 py-2 rounded-lg bg-blue-500 text-black font-semibold"
+          onClick={handleAsk}
+          className="bg-cyan-400 text-black px-6 py-3 rounded font-semibold"
         >
-          Connect Google Calendar
+          Execute
         </button>
 
-        <textarea
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          placeholder="Type or speak your command..."
-          className="w-full h-28 p-4 rounded-xl bg-slate-900 border border-slate-700 mb-4"
-        />
+        <button
+          onClick={startRecording}
+          disabled={recording}
+          className={`p-3 rounded-full ${
+            recording ? "bg-red-500" : "border border-cyan-400 text-cyan-400"
+          }`}
+        >
+          🎤
+        </button>
 
-        <div className="flex items-center gap-4">
-          <button
-            onClick={handleAsk}
-            className="px-6 py-3 rounded-xl bg-cyan-400 text-black font-semibold"
-          >
-            Execute
-          </button>
+        {recording && <span className="text-red-400">Listening…</span>}
+      </div>
 
-          <button
-            onClick={startRecording}
-            disabled={recording}
-            className={`p-3 rounded-full ${
-              recording
-                ? "bg-red-500"
-                : "border border-cyan-400 text-cyan-400"
-            }`}
-          >
-            🎤
-          </button>
+      {/* ---------- AGENTS ---------- */}
 
-          {recording && (
-            <span className="text-red-400 animate-pulse">
-              Listening…
-            </span>
-          )}
-        </div>
+      <AnimatePresence>
+        {plan && (
+          <motion.div className="mt-10">
+            <h3 className="text-xl mb-4">🤖 Agents</h3>
 
-        <AnimatePresence>
-          {plan && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="mt-10"
+            <div className="grid grid-cols-2 gap-4">
+              {plan.agents.map((a: string, i: number) => (
+                <motion.div
+                  key={a}
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: i * 0.1 }}
+                  className={`p-4 rounded-xl bg-slate-900 border ${agentColor(
+                    a
+                  )}`}
+                >
+                  <strong>{a}</strong>
+                  <p className="text-sm opacity-70">Running</p>
+                </motion.div>
+              ))}
+            </div>
+
+            <button
+              onClick={handleApprove}
+              className="mt-6 bg-green-400 text-black px-6 py-3 rounded font-semibold"
             >
-              <h3 className="text-xl mb-4">🤖 Agents Executing</h3>
+              Approve & Execute
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-              <div className="grid grid-cols-2 gap-4">
-                {plan.agents.map((agent: string, i: number) => (
-                  <motion.div
-                    key={agent}
-                    initial={{ x: -40, opacity: 0 }}
-                    animate={{ x: 0, opacity: 1 }}
-                    transition={{ delay: i * 0.15 }}
-                    className="p-4 rounded-xl bg-slate-900 border border-slate-700"
-                  >
-                    <strong>{agent}</strong>
-                    <p className="text-slate-400 text-sm">Executing</p>
-                  </motion.div>
-                ))}
+      {/* ---------- TIMELINE ---------- */}
+
+      {execution && (
+        <div className="mt-12">
+          <h3 className="text-xl mb-4">🕒 Execution Timeline</h3>
+
+          <div className="space-y-3">
+            {execution.timeline.map((t: any, i: number) => (
+              <motion.div
+                key={i}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: i * 0.15 }}
+                className="p-3 rounded bg-slate-900 border border-slate-700 text-sm"
+              >
+                {t.message}
+              </motion.div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ---------- APPROVAL DIFF ---------- */}
+
+      {execution && (
+        <div className="mt-12 grid grid-cols-2 gap-4">
+          <div className="bg-slate-900 border border-yellow-500 p-4 rounded">
+            <h4 className="mb-2">Before Approval</h4>
+            <pre className="text-xs opacity-70">
+              {JSON.stringify(plan, null, 2)}
+            </pre>
+          </div>
+
+          <div className="bg-slate-900 border border-green-500 p-4 rounded">
+            <h4 className="mb-2">After Execution</h4>
+            <pre className="text-xs opacity-70">
+              {JSON.stringify(execution.params, null, 2)}
+            </pre>
+          </div>
+        </div>
+      )}
+
+      {/* ---------- HISTORY ---------- */}
+
+      <div className="mt-16">
+        <h3 className="text-xl mb-4">📜 Execution History</h3>
+
+        <div className="space-y-3">
+          {history.map((h, i) => (
+            <div
+              key={i}
+              className="p-4 bg-slate-900 border border-slate-700 rounded"
+            >
+              <div className="flex justify-between">
+                <span>{h.intent}</span>
+                <span className="text-sm opacity-60">{h.status}</span>
               </div>
 
-              <button
-                onClick={handleApprove}
-                className="mt-6 px-6 py-3 rounded-xl bg-green-400 text-black font-semibold"
-              >
-                Approve & Execute
-              </button>
-            </motion.div>
-          )}
-        </AnimatePresence>
+              <div className="text-sm opacity-60 mt-1">
+                XP {h.xp_gained} · Tokens {h.estimated_tokens ?? "—"} · $
+                {h.estimated_cost ?? "0.00"}
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
+
+      {/* ---------- XP POPUP ---------- */}
+
+      {xpGained && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="fixed bottom-6 right-6 bg-green-500 text-black px-6 py-3 rounded-xl font-bold"
+        >
+          +{xpGained} XP ⚡
+        </motion.div>
+      )}
     </main>
   );
 }
-
 
 
 
