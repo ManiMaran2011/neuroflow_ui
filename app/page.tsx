@@ -3,12 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { GoogleLogin } from "@react-oauth/google";
-import {
-  login,
-  ask,
-  approveExecution,
-  getExecution,
-} from "../lib/api";
+import { login, ask, approveExecution, getExecution } from "../lib/api";
 
 /* ================= UTIL ================= */
 
@@ -39,6 +34,8 @@ export default function Home() {
   const [recording, setRecording] = useState(false);
   const [xpGained, setXpGained] = useState<number | null>(null);
 
+  const [agentStatus, setAgentStatus] = useState<Record<string, string>>({});
+
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
 
@@ -57,11 +54,11 @@ export default function Home() {
     fetch(`${process.env.NEXT_PUBLIC_API_BASE}/executions`, {
       headers: { Authorization: `Bearer ${token}` },
     })
-    .then(async (r) => {
-      if (!r.ok) return [];
-      const data = await r.json();
-      return Array.isArray(data) ? data : [];
-    })  
+      .then(async (r) => {
+        if (!r.ok) return [];
+        const data = await r.json();
+        return Array.isArray(data) ? data : [];
+      })
       .then(setHistory)
       .catch(() => setHistory([]));
   }, [token, execution]);
@@ -87,6 +84,7 @@ export default function Home() {
     setToken(null);
     setPlan(null);
     setExecution(null);
+    setAgentStatus({});
   }
 
   /* ---------- GOOGLE CAL ---------- */
@@ -104,17 +102,38 @@ export default function Home() {
   async function handleAsk() {
     if (!token || !input) return;
     const res = await ask(token, input);
+
     setPlan(res.execution_plan);
     setExecutionId(res.execution_id);
     setExecution(null);
+
+    const initialStatus: Record<string, string> = {};
+    res.execution_plan.agents.forEach((a: string) => {
+      initialStatus[a] = "pending";
+    });
+    setAgentStatus(initialStatus);
   }
 
   async function handleApprove() {
     if (!token || !executionId) return;
+
+    // mark all agents running
+    setAgentStatus((prev) =>
+      Object.fromEntries(Object.keys(prev).map((k) => [k, "running"]))
+    );
+
     await approveExecution(token, executionId);
     const exec = await getExecution(token, executionId);
+
     setExecution(exec);
     setXpGained(exec.xp_gained ?? 5);
+
+    // mark completed progressively
+    exec.agents.forEach((agent: string, i: number) => {
+      setTimeout(() => {
+        setAgentStatus((prev) => ({ ...prev, [agent]: "completed" }));
+      }, 600 * (i + 1));
+    });
   }
 
   /* ---------- VOICE ---------- */
@@ -207,8 +226,6 @@ export default function Home() {
 
       <h1 className="text-3xl font-bold mb-6">🧠 NeuroFlow OS</h1>
 
-      {/* ---------- COMMAND ---------- */}
-
       <button
         onClick={connectGoogleCalendar}
         className="mb-4 bg-blue-500 text-black px-4 py-2 rounded"
@@ -252,20 +269,36 @@ export default function Home() {
             <h3 className="text-xl mb-4">🤖 Agents</h3>
 
             <div className="grid grid-cols-2 gap-4">
-              {plan.agents.map((a: string, i: number) => (
-                <motion.div
-                  key={a}
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: i * 0.1 }}
-                  className={`p-4 rounded-xl bg-slate-900 border ${agentColor(
-                    a
-                  )}`}
-                >
-                  <strong>{a}</strong>
-                  <p className="text-sm opacity-70">Running</p>
-                </motion.div>
-              ))}
+              {plan.agents.map((agent: string, i: number) => {
+                const status = agentStatus[agent];
+
+                return (
+                  <motion.div
+                    key={agent}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: i * 0.15 }}
+                    className={`p-4 rounded-xl bg-slate-900 border ${agentColor(
+                      agent
+                    )}`}
+                  >
+                    <div className="flex justify-between items-center">
+                      <strong>{agent}</strong>
+                      <span
+                        className={`text-xs px-2 py-1 rounded-full ${
+                          status === "running"
+                            ? "bg-yellow-500 text-black animate-pulse"
+                            : status === "completed"
+                            ? "bg-green-500 text-black"
+                            : "bg-slate-600"
+                        }`}
+                      >
+                        {status ?? "pending"}
+                      </span>
+                    </div>
+                  </motion.div>
+                );
+              })}
             </div>
 
             <button
@@ -278,6 +311,35 @@ export default function Home() {
         )}
       </AnimatePresence>
 
+      {/* ---------- EXECUTION SUMMARY ---------- */}
+
+      {execution && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="mt-10 p-6 rounded-xl bg-slate-900 border border-slate-700"
+        >
+          <h3 className="text-lg font-semibold mb-3">📊 Execution Summary</h3>
+
+          <div className="grid grid-cols-3 gap-4 text-sm">
+            <div>
+              <p className="opacity-60">Tokens</p>
+              <p className="font-bold">{execution.estimated_tokens}</p>
+            </div>
+            <div>
+              <p className="opacity-60">Cost</p>
+              <p className="font-bold">${execution.estimated_cost}</p>
+            </div>
+            <div>
+              <p className="opacity-60">XP</p>
+              <p className="font-bold text-green-400">
+                +{execution.xp_gained}
+              </p>
+            </div>
+          </div>
+        </motion.div>
+      )}
+
       {/* ---------- TIMELINE ---------- */}
 
       {execution && (
@@ -288,34 +350,14 @@ export default function Home() {
             {execution.timeline.map((t: any, i: number) => (
               <motion.div
                 key={i}
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: i * 0.15 }}
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: i * 0.2 }}
                 className="p-3 rounded bg-slate-900 border border-slate-700 text-sm"
               >
                 {t.message}
               </motion.div>
             ))}
-          </div>
-        </div>
-      )}
-
-      {/* ---------- APPROVAL DIFF ---------- */}
-
-      {execution && (
-        <div className="mt-12 grid grid-cols-2 gap-4">
-          <div className="bg-slate-900 border border-yellow-500 p-4 rounded">
-            <h4 className="mb-2">Before Approval</h4>
-            <pre className="text-xs opacity-70">
-              {JSON.stringify(plan, null, 2)}
-            </pre>
-          </div>
-
-          <div className="bg-slate-900 border border-green-500 p-4 rounded">
-            <h4 className="mb-2">After Execution</h4>
-            <pre className="text-xs opacity-70">
-              {JSON.stringify(execution.params, null, 2)}
-            </pre>
           </div>
         </div>
       )}
@@ -327,20 +369,20 @@ export default function Home() {
 
         <div className="space-y-3">
           {history.map((h, i) => (
-            <div
+            <motion.div
               key={i}
-              className="p-4 bg-slate-900 border border-slate-700 rounded"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="p-4 bg-slate-900 border border-slate-700 rounded-xl"
             >
               <div className="flex justify-between">
                 <span>{h.intent}</span>
                 <span className="text-sm opacity-60">{h.status}</span>
               </div>
-
-              <div className="text-sm opacity-60 mt-1">
-                XP {h.xp_gained} · Tokens {h.estimated_tokens ?? "—"} · $
-                {h.estimated_cost ?? "0.00"}
+              <div className="text-xs opacity-60 mt-2">
+                XP {h.xp_gained ?? 0}
               </div>
-            </div>
+            </motion.div>
           ))}
         </div>
       </div>
@@ -349,16 +391,17 @@ export default function Home() {
 
       {xpGained && (
         <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="fixed bottom-6 right-6 bg-green-500 text-black px-6 py-3 rounded-xl font-bold"
+          initial={{ scale: 0.6, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          className="fixed bottom-6 right-6 bg-gradient-to-r from-green-400 to-emerald-500 text-black px-6 py-4 rounded-2xl font-bold shadow-2xl"
         >
-          +{xpGained} XP ⚡
+          ⚡ +{xpGained} XP Earned
         </motion.div>
       )}
     </main>
   );
 }
+
 
 
 
