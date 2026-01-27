@@ -5,24 +5,23 @@ import { motion, AnimatePresence } from "framer-motion";
 import { GoogleLogin } from "@react-oauth/google";
 import { login, ask, approveExecution, getExecution } from "../lib/api";
 
-/* ================= UTIL ================= */
+/* ================== STYLES ================== */
 
-const agentStyle = (agent: string) => {
-  if (agent.includes("Calendar")) return "border-blue-500 text-blue-600";
-  if (agent.includes("Monitor")) return "border-yellow-500 text-yellow-600";
-  if (agent.includes("Notify")) return "border-purple-500 text-purple-600";
-  if (agent.includes("XP")) return "border-green-500 text-green-600";
-  return "border-slate-400 text-slate-600";
+const agentGlow = (agent: string) => {
+  if (agent.includes("Calendar")) return "border-cyan-400 shadow-cyan-500/40 text-cyan-300";
+  if (agent.includes("Monitor")) return "border-yellow-400 shadow-yellow-500/40 text-yellow-300";
+  if (agent.includes("Notify")) return "border-purple-400 shadow-purple-500/40 text-purple-300";
+  if (agent.includes("XP")) return "border-green-400 shadow-green-500/40 text-green-300";
+  return "border-slate-600 shadow-slate-700/40 text-slate-300";
 };
 
 const badge = (state: string) => {
-  if (state === "running")
-    return "bg-yellow-400 text-black animate-pulse";
-  if (state === "completed") return "bg-green-500 text-white";
-  return "bg-slate-400 text-white";
+  if (state === "running") return "bg-yellow-400 text-black animate-pulse";
+  if (state === "completed") return "bg-green-400 text-black";
+  return "bg-slate-700 text-slate-200";
 };
 
-/* ================= PAGE ================= */
+/* ================== PAGE ================== */
 
 export default function Home() {
   const [token, setToken] = useState<string | null>(null);
@@ -82,7 +81,7 @@ export default function Home() {
   }
 
   function handleLogout() {
-    localStorage.removeItem("access_token");
+    localStorage.clear();
     setToken(null);
     setPlan(null);
     setExecution(null);
@@ -126,85 +125,84 @@ export default function Home() {
     setTimeout(() => setXpBurst(res.xp_gained ?? 15), 200);
   }
 
-  /* ================= LOGIN UI ================= */
+  /* ================= LOGIN ================= */
 
   if (!token) {
     return (
-      <main className="min-h-screen bg-gradient-to-br from-slate-100 to-slate-200 flex items-center justify-center">
-        <div className="w-[420px] bg-white shadow-2xl rounded-2xl p-8">
-          <h1 className="text-3xl font-bold mb-2 text-slate-800">
+      <main className="min-h-screen bg-black flex items-center justify-center">
+        <div className="w-[420px] bg-gradient-to-br from-slate-900 to-black border border-purple-500/40 rounded-2xl p-8 shadow-[0_0_40px_rgba(168,85,247,0.3)]">
+          <h1 className="text-3xl font-bold text-purple-400 mb-2">
             🧠 NeuroFlow OS
           </h1>
-          <p className="text-slate-500 mb-6">
-            Agentic AI for real-world execution
+          <p className="text-slate-400 mb-6">
+            Agentic AI Operating System
           </p>
 
           <input
-            className="w-full p-3 mb-4 border rounded-lg"
-            placeholder="Email address"
+            className="w-full p-3 mb-4 rounded bg-black border border-purple-500/30 text-purple-200"
+            placeholder="Email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
           />
 
           <button
             onClick={handleLogin}
-            className="w-full bg-cyan-500 text-white p-3 rounded-lg font-semibold mb-4"
+            className="w-full bg-purple-500 hover:bg-purple-600 text-black p-3 rounded-lg font-semibold mb-4 shadow-[0_0_20px_rgba(168,85,247,0.6)]"
           >
-            Login with Email
+            Login
           </button>
 
-          <div className="flex items-center my-4">
-            <div className="flex-1 h-px bg-slate-300" />
-            <span className="px-3 text-sm text-slate-500">OR</span>
-            <div className="flex-1 h-px bg-slate-300" />
+          <div className="flex justify-center">
+            <GoogleLogin
+              theme="filled_black"
+              onSuccess={async (cred) => {
+                const res = await fetch(
+                  `${process.env.NEXT_PUBLIC_API_BASE}/auth/google`,
+                  {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ id_token: cred.credential }),
+                  }
+                );
+                const data = await res.json();
+                localStorage.setItem("access_token", data.access_token);
+                setToken(data.access_token);
+              }}
+            />
           </div>
-
-          <GoogleLogin
-            onSuccess={async (cred) => {
-              const res = await fetch(
-                `${process.env.NEXT_PUBLIC_API_BASE}/auth/google`,
-                {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ id_token: cred.credential }),
-                }
-              );
-              const data = await res.json();
-              localStorage.setItem("access_token", data.access_token);
-              setToken(data.access_token);
-            }}
-          />
         </div>
       </main>
     );
   }
 
-  /* ================= MAIN UI ================= */
+  /* ================= MAIN ================= */
 
   return (
-    <main className="min-h-screen bg-slate-100 text-slate-800 p-10">
+    <main className="min-h-screen bg-black text-slate-200 p-10">
       {/* LOGOUT */}
       <button
         onClick={handleLogout}
-        className="fixed top-6 right-6 bg-red-500 text-white px-4 py-2 rounded-lg shadow"
+        className="fixed top-6 right-6 bg-red-500 text-black px-4 py-2 rounded-lg shadow-lg"
       >
         Logout
       </button>
 
-      <h1 className="text-3xl font-bold mb-1">🧠 NeuroFlow OS</h1>
-      <p className="text-slate-500 mb-4">
-        Persistent, agentic AI with monitoring and memory
+      <h1 className="text-3xl font-bold text-purple-400 mb-1">
+        🧠 NeuroFlow OS
+      </h1>
+      <p className="text-slate-400 mb-4">
+        Persistent multi-agent execution engine
       </p>
 
       <button
         onClick={connectGoogleCalendar}
-        className="mb-6 bg-blue-500 text-white px-5 py-2 rounded-lg font-semibold"
+        className="mb-6 bg-cyan-500 text-black px-5 py-2 rounded-lg font-semibold shadow-[0_0_20px_rgba(34,211,238,0.6)]"
       >
         🔗 Connect Google Calendar
       </button>
 
       <textarea
-        className="w-full h-28 p-4 rounded-xl border mb-4"
+        className="w-full h-28 p-4 rounded-xl bg-black border border-purple-500/30 text-purple-200 mb-4 shadow-[0_0_25px_rgba(168,85,247,0.2)]"
         placeholder="Try: Schedule a meeting tomorrow at 5pm"
         value={input}
         onChange={(e) => setInput(e.target.value)}
@@ -212,7 +210,7 @@ export default function Home() {
 
       <button
         onClick={handleAsk}
-        className="bg-cyan-500 text-white px-6 py-3 rounded-xl font-semibold"
+        className="bg-purple-500 text-black px-6 py-3 rounded-xl font-semibold shadow-[0_0_30px_rgba(168,85,247,0.7)]"
       >
         Execute Command
       </button>
@@ -220,13 +218,18 @@ export default function Home() {
       {/* AGENTS */}
       {plan && (
         <div className="mt-10">
-          <h3 className="text-xl mb-4">🤖 Agents</h3>
+          <h3 className="text-xl mb-4 text-purple-300">🤖 Agents</h3>
 
           <div className="grid grid-cols-2 gap-4">
-            {plan.agents.map((a: string) => (
-              <div
+            {plan.agents.map((a: string, i: number) => (
+              <motion.div
                 key={a}
-                className={`p-4 rounded-xl bg-white border ${agentStyle(a)}`}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: i * 0.1 }}
+                className={`p-4 rounded-xl bg-black border ${agentGlow(
+                  a
+                )} shadow-lg`}
               >
                 <div className="flex justify-between items-center">
                   <strong>{a}</strong>
@@ -238,13 +241,13 @@ export default function Home() {
                     {agentState[a]}
                   </span>
                 </div>
-              </div>
+              </motion.div>
             ))}
           </div>
 
           <button
             onClick={handleApprove}
-            className="mt-6 bg-green-500 text-white px-6 py-3 rounded-xl font-semibold"
+            className="mt-6 bg-green-500 text-black px-6 py-3 rounded-xl font-semibold shadow-[0_0_30px_rgba(34,197,94,0.6)]"
           >
             Approve & Execute
           </button>
@@ -254,12 +257,12 @@ export default function Home() {
       {/* TIMELINE */}
       {execution && (
         <div className="mt-12">
-          <h3 className="text-xl mb-4">🕒 Execution Timeline</h3>
+          <h3 className="text-xl mb-4 text-purple-300">🕒 Execution Timeline</h3>
           <div className="space-y-3">
             {execution.timeline.map((t: any, i: number) => (
               <div
                 key={i}
-                className="p-3 bg-white border rounded"
+                className="p-3 bg-black border border-purple-500/20 rounded shadow"
               >
                 {t.message}
               </div>
@@ -273,13 +276,13 @@ export default function Home() {
         <div className="mt-10">
           <button
             onClick={() => setShowAdvanced((s) => !s)}
-            className="text-sm text-slate-500 underline"
+            className="text-sm text-purple-400 underline"
           >
             {showAdvanced ? "Hide" : "Show"} advanced details
           </button>
 
           {showAdvanced && (
-            <pre className="mt-4 p-4 bg-white border rounded text-xs overflow-auto">
+            <pre className="mt-4 p-4 bg-black border border-purple-500/30 rounded text-xs overflow-auto text-purple-200">
               {JSON.stringify(execution, null, 2)}
             </pre>
           )}
@@ -289,9 +292,9 @@ export default function Home() {
       {/* XP BURST */}
       {xpBurst && (
         <motion.div
-          initial={{ scale: 0.6, opacity: 0, y: 20 }}
-          animate={{ scale: 1.1, opacity: 1, y: -20 }}
-          className="fixed bottom-6 right-6 bg-gradient-to-r from-green-400 to-emerald-500 text-white px-6 py-4 rounded-2xl font-bold shadow-2xl"
+          initial={{ scale: 0.5, opacity: 0, y: 30 }}
+          animate={{ scale: 1.2, opacity: 1, y: -20 }}
+          className="fixed bottom-6 right-6 bg-gradient-to-r from-purple-500 to-pink-500 text-black px-6 py-4 rounded-2xl font-bold shadow-[0_0_40px_rgba(236,72,153,0.8)]"
         >
           ⚡ +{xpBurst} XP
         </motion.div>
@@ -299,6 +302,8 @@ export default function Home() {
     </main>
   );
 }
+
+
 
 
 
