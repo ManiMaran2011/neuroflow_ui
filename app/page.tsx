@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { login, ask, approveExecution, getExecution } from "../lib/api";
 
-/* ================= UTILS ================= */
+/* ================== UTILS ================== */
 
 const agentStyle = (agent: string) => {
   if (agent.includes("Calendar")) return "border-blue-500 text-blue-400";
@@ -14,15 +14,14 @@ const agentStyle = (agent: string) => {
   return "border-slate-600 text-slate-300";
 };
 
-const statusBadge = (status: string) => {
-  if (status === "running")
+const badge = (state: string) => {
+  if (state === "running")
     return "bg-yellow-400 text-black animate-pulse";
-  if (status === "completed")
-    return "bg-green-400 text-black";
+  if (state === "completed") return "bg-green-400 text-black";
   return "bg-slate-600 text-white";
 };
 
-/* ================= PAGE ================= */
+/* ================== PAGE ================== */
 
 export default function Home() {
   const [token, setToken] = useState<string | null>(null);
@@ -34,23 +33,24 @@ export default function Home() {
   const [executionId, setExecutionId] = useState<string | null>(null);
 
   const [agentState, setAgentState] = useState<Record<string, string>>({});
-  const [xpBurst, setXpBurst] = useState<number | null>(null);
   const [streaming, setStreaming] = useState(false);
+
+  const [xpBurst, setXpBurst] = useState<number | null>(null);
   const [showAdvanced, setShowAdvanced] = useState(false);
 
-  /* ========== AUTH RESTORE ========== */
+  /* ---------- RESTORE LOGIN ---------- */
 
   useEffect(() => {
     const t = localStorage.getItem("access_token");
     if (t) setToken(t);
   }, []);
 
-  /* ========== STREAM EXECUTION ========== */
+  /* ---------- STREAM EXECUTION ---------- */
 
   useEffect(() => {
     if (!streaming || !executionId || !token) return;
 
-    const poll = setInterval(async () => {
+    const interval = setInterval(async () => {
       const exec = await getExecution(token, executionId);
       setExecution(exec);
 
@@ -69,15 +69,22 @@ export default function Home() {
       }
     }, 1800);
 
-    return () => clearInterval(poll);
+    return () => clearInterval(interval);
   }, [streaming, executionId, token]);
 
-  /* ========== HANDLERS ========== */
+  /* ---------- HANDLERS ---------- */
 
   async function handleLogin() {
     const res = await login(email);
     localStorage.setItem("access_token", res.access_token);
     setToken(res.access_token);
+  }
+
+  function connectGoogleCalendar() {
+    const t = localStorage.getItem("access_token");
+    if (!t) return;
+    window.location.href =
+      `${process.env.NEXT_PUBLIC_API_BASE}/oauth/google/connect?token=${t}`;
   }
 
   async function handleAsk() {
@@ -88,9 +95,9 @@ export default function Home() {
     setExecutionId(res.execution_id);
     setExecution(null);
 
-    const state: Record<string, string> = {};
-    res.execution_plan.agents.forEach((a: string) => (state[a] = "pending"));
-    setAgentState(state);
+    const init: Record<string, string> = {};
+    res.execution_plan.agents.forEach((a: string) => (init[a] = "pending"));
+    setAgentState(init);
   }
 
   async function handleApprove() {
@@ -104,22 +111,26 @@ export default function Home() {
     );
 
     const res = await approveExecution(token, executionId);
-    setTimeout(() => setXpBurst(res.xp_gained ?? 15), 300);
+
+    // 🔥 ALWAYS trigger XP animation
+    setTimeout(() => setXpBurst(res.xp_gained ?? 15), 200);
   }
 
-  /* ================= LOGIN ================= */
+  /* ================== LOGIN ================== */
 
   if (!token) {
     return (
       <main className="min-h-screen bg-black flex items-center justify-center">
-        <div className="w-[420px] bg-slate-950 border border-slate-700 p-8 rounded-xl">
+        <div className="w-[420px] bg-slate-950 border border-slate-700 p-8 rounded-2xl">
           <h1 className="text-2xl font-bold mb-4">🧠 NeuroFlow OS</h1>
+
           <input
             className="w-full p-3 mb-4 bg-slate-900 border border-slate-700 rounded"
             placeholder="Email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
           />
+
           <button
             onClick={handleLogin}
             className="w-full bg-cyan-400 text-black p-3 rounded font-semibold"
@@ -131,17 +142,26 @@ export default function Home() {
     );
   }
 
-  /* ================= MAIN ================= */
+  /* ================== MAIN ================== */
 
   return (
     <main className="min-h-screen bg-black text-slate-200 p-10">
-      <h1 className="text-3xl font-bold mb-2">🧠 NeuroFlow OS</h1>
-      <p className="opacity-60 mb-6">
-        An agentic system with memory, monitoring, and real-world side effects.
+      <h1 className="text-3xl font-bold mb-1">🧠 NeuroFlow OS</h1>
+      <p className="opacity-60 mb-4">
+        An agentic AI system with memory, monitoring, and real-world actions.
       </p>
 
+      {/* 🔗 GOOGLE CALENDAR */}
+      <button
+        onClick={connectGoogleCalendar}
+        className="mb-6 bg-blue-500 text-black px-5 py-2 rounded-lg font-semibold"
+      >
+        🔗 Connect Google Calendar
+      </button>
+
+      {/* COMMAND INPUT */}
       <textarea
-        className="w-full h-28 p-4 rounded bg-slate-900 border border-slate-700 mb-4"
+        className="w-full h-28 p-4 rounded-xl bg-slate-900 border border-slate-700 mb-4"
         placeholder="Try: Schedule a meeting tomorrow at 5pm"
         value={input}
         onChange={(e) => setInput(e.target.value)}
@@ -149,16 +169,16 @@ export default function Home() {
 
       <button
         onClick={handleAsk}
-        className="bg-cyan-400 text-black px-6 py-3 rounded font-semibold"
+        className="bg-cyan-400 text-black px-6 py-3 rounded-xl font-semibold"
       >
         Execute Command
       </button>
 
-      {/* ================= AGENTS ================= */}
-
+      {/* AGENTS */}
       {plan && (
         <div className="mt-10">
-          <h3 className="text-xl mb-4">🤖 Agents Executing</h3>
+          <h3 className="text-xl mb-4">🤖 Agents</h3>
+
           <div className="grid grid-cols-2 gap-4">
             {plan.agents.map((a: string, i: number) => (
               <motion.div
@@ -171,7 +191,7 @@ export default function Home() {
                 <div className="flex justify-between items-center">
                   <strong>{a}</strong>
                   <span
-                    className={`text-xs px-2 py-1 rounded ${statusBadge(
+                    className={`text-xs px-2 py-1 rounded ${badge(
                       agentState[a]
                     )}`}
                   >
@@ -184,15 +204,14 @@ export default function Home() {
 
           <button
             onClick={handleApprove}
-            className="mt-6 bg-green-400 text-black px-6 py-3 rounded font-semibold"
+            className="mt-6 bg-green-400 text-black px-6 py-3 rounded-xl font-semibold"
           >
             Approve & Execute
           </button>
         </div>
       )}
 
-      {/* ================= TIMELINE ================= */}
-
+      {/* TIMELINE */}
       {execution && (
         <div className="mt-12">
           <h3 className="text-xl mb-4">🕒 Execution Timeline</h3>
@@ -212,8 +231,7 @@ export default function Home() {
         </div>
       )}
 
-      {/* ================= ADVANCED ================= */}
-
+      {/* ADVANCED */}
       {execution && (
         <div className="mt-10">
           <button
@@ -238,8 +256,7 @@ export default function Home() {
         </div>
       )}
 
-      {/* ================= XP BURST ================= */}
-
+      {/* XP BURST */}
       {xpBurst && (
         <motion.div
           initial={{ scale: 0.6, opacity: 0, y: 20 }}
@@ -252,6 +269,7 @@ export default function Home() {
     </main>
   );
 }
+
 
 
 
