@@ -17,10 +17,9 @@ const agentColor = (agent: string) => {
 };
 
 const humanIntent = (intent: string) => {
-  if (!intent) return "🧠 Intelligent Execution";
-  if (intent.toLowerCase().includes("track"))
+  if (intent?.toLowerCase().includes("track"))
     return "🎯 Daily Progress Tracking";
-  if (intent.toLowerCase().includes("schedule"))
+  if (intent?.toLowerCase().includes("schedule"))
     return "📅 Scheduled Task";
   return "🧠 Intelligent Execution";
 };
@@ -39,12 +38,13 @@ export default function Home() {
   const [execution, setExecution] = useState<any>(null);
 
   const [history, setHistory] = useState<any[]>([]);
+  const [recording, setRecording] = useState(false);
   const [xpGained, setXpGained] = useState<number | null>(null);
 
   const [agentStatus, setAgentStatus] = useState<Record<string, string>>({});
-  const [streaming, setStreaming] = useState(false);
 
-  const [showAdvanced, setShowAdvanced] = useState(false);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
 
   /* ---------- RESTORE LOGIN ---------- */
 
@@ -61,7 +61,11 @@ export default function Home() {
     fetch(`${process.env.NEXT_PUBLIC_API_BASE}/executions`, {
       headers: { Authorization: `Bearer ${token}` },
     })
-      .then((r) => r.json())
+      .then(async (r) => {
+        if (!r.ok) return [];
+        const data = await r.json();
+        return Array.isArray(data) ? data : [];
+      })
       .then(setHistory)
       .catch(() => setHistory([]));
   }, [token, execution]);
@@ -73,33 +77,6 @@ export default function Home() {
     const t = setTimeout(() => setXpGained(null), 3000);
     return () => clearTimeout(t);
   }, [xpGained]);
-
-  /* ---------- REAL-TIME STREAMING (POLLING) ---------- */
-
-  useEffect(() => {
-    if (!streaming || !token || !executionId) return;
-
-    const interval = setInterval(async () => {
-      const exec = await getExecution(token, executionId);
-      setExecution(exec);
-
-      exec.agents.forEach((agent: string) => {
-        setAgentStatus((prev) => ({
-          ...prev,
-          [agent]: prev[agent] === "completed" ? "completed" : "running",
-        }));
-      });
-
-      if (exec.status === "executed" || exec.status === "active") {
-        exec.agents.forEach((a: string) =>
-          setAgentStatus((prev) => ({ ...prev, [a]: "completed" }))
-        );
-        setStreaming(false);
-      }
-    }, 2000);
-
-    return () => clearInterval(interval);
-  }, [streaming, token, executionId]);
 
   /* ---------- AUTH ---------- */
 
@@ -117,6 +94,16 @@ export default function Home() {
     setAgentStatus({});
   }
 
+  /* ---------- GOOGLE CAL ---------- */
+
+  function connectGoogleCalendar() {
+    const t = localStorage.getItem("access_token");
+    if (!t) return;
+    window.location.assign(
+      `${process.env.NEXT_PUBLIC_API_BASE}/oauth/google/connect?token=${t}`
+    );
+  }
+
   /* ---------- ASK ---------- */
 
   async function handleAsk() {
@@ -127,27 +114,32 @@ export default function Home() {
     setExecutionId(res.execution_id);
     setExecution(null);
 
-    const initial: Record<string, string> = {};
-    res.execution_plan.agents.forEach((a: string) => (initial[a] = "pending"));
-    setAgentStatus(initial);
+    const initialStatus: Record<string, string> = {};
+    res.execution_plan.agents.forEach((a: string) => {
+      initialStatus[a] = "pending";
+    });
+    setAgentStatus(initialStatus);
   }
 
   async function handleApprove() {
     if (!token || !executionId) return;
 
-    setStreaming(true);
     setAgentStatus((prev) =>
       Object.fromEntries(Object.keys(prev).map((k) => [k, "running"]))
     );
 
     await approveExecution(token, executionId);
+    const exec = await getExecution(token, executionId);
+
+    setExecution(exec);
+    setXpGained(exec.xp_gained ?? 5);
+
+    exec.agents.forEach((agent: string, i: number) => {
+      setTimeout(() => {
+        setAgentStatus((prev) => ({ ...prev, [agent]: "completed" }));
+      }, 500 * (i + 1));
+    });
   }
-
-  /* ---------- STREAK CALC ---------- */
-
-  const completed = history.filter((h) => h.status === "completed").length;
-  const streak = Math.min(completed, 7);
-  const streakPercent = Math.min((streak / 7) * 100, 100);
 
   /* ================= UI ================= */
 
@@ -202,120 +194,191 @@ export default function Home() {
 
       <h1 className="text-3xl font-bold mb-2">🧠 NeuroFlow OS</h1>
       <p className="opacity-60 mb-6">
-        Agentic system with memory, monitoring, and feedback loops.
+        An agentic system that executes, monitors, and follows up over time.
       </p>
 
       <textarea
         className="w-full h-28 p-4 rounded bg-slate-900 border border-slate-700 mb-4"
         value={input}
         onChange={(e) => setInput(e.target.value)}
-        placeholder="Try: Track my progress for 7 days"
+        placeholder="Type a command like: Track my fitness progress for 7 days"
       />
 
-      <button
-        onClick={handleAsk}
-        className="bg-cyan-400 text-black px-6 py-3 rounded font-semibold"
-      >
-        Execute
-      </button>
-
-      {/* ---------- STREAK ---------- */}
-
-      <div className="mt-10 p-6 rounded-xl bg-slate-900 border border-slate-700">
-        <h3 className="font-semibold mb-2">📈 Progress Streak</h3>
-        <div className="h-3 bg-slate-700 rounded overflow-hidden">
-          <motion.div
-            initial={{ width: 0 }}
-            animate={{ width: `${streakPercent}%` }}
-            className="h-full bg-green-400"
-          />
-        </div>
-        <p className="text-sm opacity-60 mt-2">
-          {streak} day streak · {completed} total completions
-        </p>
+      <div className="flex gap-4">
+        <motion.button
+          whileHover={{ scale: 1.03 }}
+          whileTap={{ scale: 0.97 }}
+          onClick={handleAsk}
+          className="bg-cyan-400 text-black px-6 py-3 rounded font-semibold"
+        >
+          Execute
+        </motion.button>
       </div>
+
+      {/* ---------- EXECUTION HEADER ---------- */}
+
+      {plan && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mt-10 p-6 rounded-xl bg-slate-900 border border-slate-700"
+        >
+          <h2 className="text-2xl font-bold mb-1">
+            {humanIntent(plan.intent)}
+          </h2>
+          <p className="opacity-70">
+            This execution is monitored over time. You’ll receive reminders and
+            earn XP for progress.
+          </p>
+        </motion.div>
+      )}
 
       {/* ---------- AGENTS ---------- */}
 
-      {plan && (
-        <div className="mt-10">
-          <h3 className="text-xl mb-4">🤖 Agents</h3>
-          <div className="grid grid-cols-2 gap-4">
-            {plan.agents.map((agent: string) => (
-              <motion.div
-                key={agent}
-                animate={{ opacity: 1 }}
-                className={`p-4 rounded-xl bg-slate-900 border ${agentColor(
-                  agent
-                )}`}
-              >
-                <div className="flex justify-between">
-                  <strong>{agent}</strong>
-                  <span
-                    className={`text-xs px-2 py-1 rounded-full ${
-                      agentStatus[agent] === "running"
-                        ? "bg-yellow-500 text-black animate-pulse"
-                        : agentStatus[agent] === "completed"
-                        ? "bg-green-500 text-black"
-                        : "bg-slate-600"
-                    }`}
+      <AnimatePresence>
+        {plan && (
+          <motion.div className="mt-10">
+            <h3 className="text-xl mb-4">🤖 Agents Involved</h3>
+
+            <div className="grid grid-cols-2 gap-4">
+              {plan.agents.map((agent: string, i: number) => {
+                const status = agentStatus[agent];
+
+                return (
+                  <motion.div
+                    key={agent}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: i * 0.1 }}
+                    className={`p-4 rounded-xl bg-slate-900 border ${agentColor(
+                      agent
+                    )}`}
                   >
-                    {agentStatus[agent]}
-                  </span>
-                </div>
+                    <div className="flex justify-between items-center">
+                      <strong>{agent}</strong>
+                      <span
+                        className={`text-xs px-2 py-1 rounded-full ${
+                          status === "running"
+                            ? "bg-yellow-500 text-black animate-pulse"
+                            : status === "completed"
+                            ? "bg-green-500 text-black"
+                            : "bg-slate-600"
+                        }`}
+                      >
+                        {status}
+                      </span>
+                    </div>
+                  </motion.div>
+                );
+              })}
+            </div>
+
+            <motion.button
+              whileHover={{ scale: 1.04 }}
+              whileTap={{ scale: 0.96 }}
+              onClick={handleApprove}
+              className="mt-6 bg-green-400 text-black px-6 py-3 rounded font-semibold"
+            >
+              Approve & Execute
+            </motion.button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ---------- EXECUTION SUMMARY ---------- */}
+
+      {execution && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="mt-12 p-6 rounded-xl bg-slate-900 border border-slate-700"
+        >
+          <h3 className="text-lg font-semibold mb-3">
+            📊 Execution Summary
+          </h3>
+
+          <div className="grid grid-cols-3 gap-4 text-sm">
+            <div>
+              <p className="opacity-60">Tokens</p>
+              <p className="font-bold">{execution.estimated_tokens}</p>
+            </div>
+            <div>
+              <p className="opacity-60">Cost</p>
+              <p className="font-bold">${execution.estimated_cost}</p>
+            </div>
+            <div>
+              <p className="opacity-60">XP Earned</p>
+              <p className="font-bold text-green-400">
+                +{execution.xp_gained}
+              </p>
+            </div>
+          </div>
+        </motion.div>
+      )}
+
+      {/* ---------- TIMELINE ---------- */}
+
+      {execution && (
+        <div className="mt-12">
+          <h3 className="text-xl mb-4">🕒 Execution Timeline</h3>
+
+          <div className="space-y-3">
+            {execution.timeline.map((t: any, i: number) => (
+              <motion.div
+                key={i}
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: i * 0.15 }}
+                className="p-3 rounded bg-slate-900 border border-slate-700 text-sm"
+              >
+                {t.message}
               </motion.div>
             ))}
           </div>
-
-          <button
-            onClick={handleApprove}
-            className="mt-6 bg-green-400 text-black px-6 py-3 rounded font-semibold"
-          >
-            Approve & Execute
-          </button>
         </div>
       )}
 
-      {/* ---------- ADVANCED ---------- */}
+      {/* ---------- HISTORY ---------- */}
 
-      {execution && (
-        <div className="mt-10">
-          <button
-            onClick={() => setShowAdvanced((p) => !p)}
-            className="text-sm opacity-60 underline"
-          >
-            {showAdvanced ? "Hide" : "Show"} advanced details
-          </button>
+      <div className="mt-16">
+        <h3 className="text-xl mb-4">📜 Execution History</h3>
 
-          <AnimatePresence>
-            {showAdvanced && (
-              <motion.pre
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: "auto" }}
-                exit={{ opacity: 0, height: 0 }}
-                className="mt-4 p-4 bg-slate-950 border border-slate-700 rounded text-xs overflow-auto"
-              >
-                {JSON.stringify(execution, null, 2)}
-              </motion.pre>
-            )}
-          </AnimatePresence>
+        <div className="space-y-3">
+          {history.map((h, i) => (
+            <motion.div
+              key={i}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="p-4 bg-slate-900 border border-slate-700 rounded-xl"
+            >
+              <div className="flex justify-between">
+                <span>{humanIntent(h.intent)}</span>
+                <span className="text-sm opacity-60">{h.status}</span>
+              </div>
+              <div className="text-xs opacity-60 mt-2">
+                XP {h.xp_gained ?? 0}
+              </div>
+            </motion.div>
+          ))}
         </div>
-      )}
+      </div>
 
-      {/* ---------- XP ---------- */}
+      {/* ---------- XP POPUP ---------- */}
 
       {xpGained && (
         <motion.div
           initial={{ scale: 0.6, opacity: 0, y: 10 }}
           animate={{ scale: 1.1, opacity: 1, y: -20 }}
+          exit={{ opacity: 0 }}
           className="fixed bottom-6 right-6 bg-gradient-to-r from-green-400 to-emerald-500 text-black px-6 py-4 rounded-2xl font-bold shadow-2xl"
         >
-          ⚡ +{xpGained} XP
+          ⚡ +{xpGained} XP Earned
         </motion.div>
       )}
     </main>
   );
 }
+
 
 
 
