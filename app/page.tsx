@@ -2,26 +2,27 @@
 
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { GoogleLogin } from "@react-oauth/google";
 import { login, ask, approveExecution, getExecution } from "../lib/api";
 
-/* ================== UTILS ================== */
+/* ================= UTIL ================= */
 
 const agentStyle = (agent: string) => {
-  if (agent.includes("Calendar")) return "border-blue-500 text-blue-400";
-  if (agent.includes("Monitor")) return "border-yellow-500 text-yellow-400";
-  if (agent.includes("Notify")) return "border-purple-500 text-purple-400";
-  if (agent.includes("XP")) return "border-green-500 text-green-400";
-  return "border-slate-600 text-slate-300";
+  if (agent.includes("Calendar")) return "border-blue-500 text-blue-600";
+  if (agent.includes("Monitor")) return "border-yellow-500 text-yellow-600";
+  if (agent.includes("Notify")) return "border-purple-500 text-purple-600";
+  if (agent.includes("XP")) return "border-green-500 text-green-600";
+  return "border-slate-400 text-slate-600";
 };
 
 const badge = (state: string) => {
   if (state === "running")
     return "bg-yellow-400 text-black animate-pulse";
-  if (state === "completed") return "bg-green-400 text-black";
-  return "bg-slate-600 text-white";
+  if (state === "completed") return "bg-green-500 text-white";
+  return "bg-slate-400 text-white";
 };
 
-/* ================== PAGE ================== */
+/* ================= PAGE ================= */
 
 export default function Home() {
   const [token, setToken] = useState<string | null>(null);
@@ -67,12 +68,12 @@ export default function Home() {
         );
         setStreaming(false);
       }
-    }, 1800);
+    }, 1500);
 
     return () => clearInterval(interval);
   }, [streaming, executionId, token]);
 
-  /* ---------- HANDLERS ---------- */
+  /* ---------- AUTH ---------- */
 
   async function handleLogin() {
     const res = await login(email);
@@ -96,10 +97,12 @@ export default function Home() {
       `${process.env.NEXT_PUBLIC_API_BASE}/oauth/google/connect?token=${t}`;
   }
 
+  /* ---------- ASK ---------- */
+
   async function handleAsk() {
     if (!token || !input) return;
-    const res = await ask(token, input);
 
+    const res = await ask(token, input);
     setPlan(res.execution_plan);
     setExecutionId(res.execution_id);
     setExecution(null);
@@ -120,65 +123,88 @@ export default function Home() {
     );
 
     const res = await approveExecution(token, executionId);
-
-    // 🔥 ALWAYS trigger XP animation
     setTimeout(() => setXpBurst(res.xp_gained ?? 15), 200);
   }
 
-  /* ================== LOGIN ================== */
+  /* ================= LOGIN UI ================= */
 
   if (!token) {
     return (
-      <main className="min-h-screen bg-black flex items-center justify-center">
-        <div className="w-[420px] bg-slate-950 border border-slate-700 p-8 rounded-2xl">
-          <h1 className="text-2xl font-bold mb-4">🧠 NeuroFlow OS</h1>
+      <main className="min-h-screen bg-gradient-to-br from-slate-100 to-slate-200 flex items-center justify-center">
+        <div className="w-[420px] bg-white shadow-2xl rounded-2xl p-8">
+          <h1 className="text-3xl font-bold mb-2 text-slate-800">
+            🧠 NeuroFlow OS
+          </h1>
+          <p className="text-slate-500 mb-6">
+            Agentic AI for real-world execution
+          </p>
 
           <input
-            className="w-full p-3 mb-4 bg-slate-900 border border-slate-700 rounded"
-            placeholder="Email"
+            className="w-full p-3 mb-4 border rounded-lg"
+            placeholder="Email address"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
           />
 
           <button
             onClick={handleLogin}
-            className="w-full bg-cyan-400 text-black p-3 rounded font-semibold"
+            className="w-full bg-cyan-500 text-white p-3 rounded-lg font-semibold mb-4"
           >
-            Login
+            Login with Email
           </button>
+
+          <div className="flex items-center my-4">
+            <div className="flex-1 h-px bg-slate-300" />
+            <span className="px-3 text-sm text-slate-500">OR</span>
+            <div className="flex-1 h-px bg-slate-300" />
+          </div>
+
+          <GoogleLogin
+            onSuccess={async (cred) => {
+              const res = await fetch(
+                `${process.env.NEXT_PUBLIC_API_BASE}/auth/google`,
+                {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ id_token: cred.credential }),
+                }
+              );
+              const data = await res.json();
+              localStorage.setItem("access_token", data.access_token);
+              setToken(data.access_token);
+            }}
+          />
         </div>
       </main>
     );
   }
 
-  /* ================== MAIN ================== */
+  /* ================= MAIN UI ================= */
 
   return (
-    <main className="min-h-screen bg-black text-slate-200 p-10">
+    <main className="min-h-screen bg-slate-100 text-slate-800 p-10">
       {/* LOGOUT */}
       <button
         onClick={handleLogout}
-        className="fixed top-6 right-6 bg-red-500 text-black px-4 py-2 rounded-lg font-semibold shadow-lg"
+        className="fixed top-6 right-6 bg-red-500 text-white px-4 py-2 rounded-lg shadow"
       >
         Logout
       </button>
 
       <h1 className="text-3xl font-bold mb-1">🧠 NeuroFlow OS</h1>
-      <p className="opacity-60 mb-4">
-        An agentic AI system with memory, monitoring, and real-world actions.
+      <p className="text-slate-500 mb-4">
+        Persistent, agentic AI with monitoring and memory
       </p>
 
-      {/* GOOGLE CALENDAR */}
       <button
         onClick={connectGoogleCalendar}
-        className="mb-6 bg-blue-500 text-black px-5 py-2 rounded-lg font-semibold"
+        className="mb-6 bg-blue-500 text-white px-5 py-2 rounded-lg font-semibold"
       >
         🔗 Connect Google Calendar
       </button>
 
-      {/* COMMAND INPUT */}
       <textarea
-        className="w-full h-28 p-4 rounded-xl bg-slate-900 border border-slate-700 mb-4"
+        className="w-full h-28 p-4 rounded-xl border mb-4"
         placeholder="Try: Schedule a meeting tomorrow at 5pm"
         value={input}
         onChange={(e) => setInput(e.target.value)}
@@ -186,7 +212,7 @@ export default function Home() {
 
       <button
         onClick={handleAsk}
-        className="bg-cyan-400 text-black px-6 py-3 rounded-xl font-semibold"
+        className="bg-cyan-500 text-white px-6 py-3 rounded-xl font-semibold"
       >
         Execute Command
       </button>
@@ -197,13 +223,10 @@ export default function Home() {
           <h3 className="text-xl mb-4">🤖 Agents</h3>
 
           <div className="grid grid-cols-2 gap-4">
-            {plan.agents.map((a: string, i: number) => (
-              <motion.div
+            {plan.agents.map((a: string) => (
+              <div
                 key={a}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.1 }}
-                className={`p-4 rounded-xl bg-slate-900 border ${agentStyle(a)}`}
+                className={`p-4 rounded-xl bg-white border ${agentStyle(a)}`}
               >
                 <div className="flex justify-between items-center">
                   <strong>{a}</strong>
@@ -215,13 +238,13 @@ export default function Home() {
                     {agentState[a]}
                   </span>
                 </div>
-              </motion.div>
+              </div>
             ))}
           </div>
 
           <button
             onClick={handleApprove}
-            className="mt-6 bg-green-400 text-black px-6 py-3 rounded-xl font-semibold"
+            className="mt-6 bg-green-500 text-white px-6 py-3 rounded-xl font-semibold"
           >
             Approve & Execute
           </button>
@@ -234,15 +257,12 @@ export default function Home() {
           <h3 className="text-xl mb-4">🕒 Execution Timeline</h3>
           <div className="space-y-3">
             {execution.timeline.map((t: any, i: number) => (
-              <motion.div
+              <div
                 key={i}
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: i * 0.15 }}
-                className="p-3 rounded bg-slate-900 border border-slate-700"
+                className="p-3 bg-white border rounded"
               >
                 {t.message}
-              </motion.div>
+              </div>
             ))}
           </div>
         </div>
@@ -253,23 +273,16 @@ export default function Home() {
         <div className="mt-10">
           <button
             onClick={() => setShowAdvanced((s) => !s)}
-            className="text-sm opacity-60 underline"
+            className="text-sm text-slate-500 underline"
           >
             {showAdvanced ? "Hide" : "Show"} advanced details
           </button>
 
-          <AnimatePresence>
-            {showAdvanced && (
-              <motion.pre
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: "auto" }}
-                exit={{ opacity: 0, height: 0 }}
-                className="mt-4 p-4 bg-slate-950 border border-slate-700 rounded text-xs overflow-auto"
-              >
-                {JSON.stringify(execution, null, 2)}
-              </motion.pre>
-            )}
-          </AnimatePresence>
+          {showAdvanced && (
+            <pre className="mt-4 p-4 bg-white border rounded text-xs overflow-auto">
+              {JSON.stringify(execution, null, 2)}
+            </pre>
+          )}
         </div>
       )}
 
@@ -278,7 +291,7 @@ export default function Home() {
         <motion.div
           initial={{ scale: 0.6, opacity: 0, y: 20 }}
           animate={{ scale: 1.1, opacity: 1, y: -20 }}
-          className="fixed bottom-6 right-6 bg-gradient-to-r from-green-400 to-emerald-500 text-black px-6 py-4 rounded-2xl font-bold shadow-2xl"
+          className="fixed bottom-6 right-6 bg-gradient-to-r from-green-400 to-emerald-500 text-white px-6 py-4 rounded-2xl font-bold shadow-2xl"
         >
           ⚡ +{xpBurst} XP
         </motion.div>
@@ -286,6 +299,7 @@ export default function Home() {
     </main>
   );
 }
+
 
 
 
