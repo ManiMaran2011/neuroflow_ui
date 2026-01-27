@@ -1,110 +1,84 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { GoogleLogin } from "@react-oauth/google";
 import { login, ask, approveExecution, getExecution } from "../lib/api";
 
-/* ================= UTIL ================= */
+/* ================= UTILS ================= */
 
-const agentColor = (agent: string) => {
+const agentStyle = (agent: string) => {
   if (agent.includes("Calendar")) return "border-blue-500 text-blue-400";
   if (agent.includes("Monitor")) return "border-yellow-500 text-yellow-400";
+  if (agent.includes("Notify")) return "border-purple-500 text-purple-400";
   if (agent.includes("XP")) return "border-green-500 text-green-400";
-  if (agent.includes("Notify") || agent.includes("Email"))
-    return "border-purple-500 text-purple-400";
   return "border-slate-600 text-slate-300";
 };
 
-const humanIntent = (intent: string) => {
-  if (intent?.toLowerCase().includes("track"))
-    return "🎯 Daily Progress Tracking";
-  if (intent?.toLowerCase().includes("schedule"))
-    return "📅 Scheduled Task";
-  return "🧠 Intelligent Execution";
+const statusBadge = (status: string) => {
+  if (status === "running")
+    return "bg-yellow-400 text-black animate-pulse";
+  if (status === "completed")
+    return "bg-green-400 text-black";
+  return "bg-slate-600 text-white";
 };
 
-/* ================= COMPONENT ================= */
+/* ================= PAGE ================= */
 
 export default function Home() {
-  /* ---------- STATE ---------- */
-
   const [token, setToken] = useState<string | null>(null);
   const [email, setEmail] = useState("");
   const [input, setInput] = useState("");
 
   const [plan, setPlan] = useState<any>(null);
-  const [executionId, setExecutionId] = useState<string | null>(null);
   const [execution, setExecution] = useState<any>(null);
+  const [executionId, setExecutionId] = useState<string | null>(null);
 
-  const [history, setHistory] = useState<any[]>([]);
-  const [recording, setRecording] = useState(false);
-  const [xpGained, setXpGained] = useState<number | null>(null);
+  const [agentState, setAgentState] = useState<Record<string, string>>({});
+  const [xpBurst, setXpBurst] = useState<number | null>(null);
+  const [streaming, setStreaming] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(false);
 
-  const [agentStatus, setAgentStatus] = useState<Record<string, string>>({});
-
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const chunksRef = useRef<Blob[]>([]);
-
-  /* ---------- RESTORE LOGIN ---------- */
+  /* ========== AUTH RESTORE ========== */
 
   useEffect(() => {
-    const stored = localStorage.getItem("access_token");
-    if (stored) setToken(stored);
+    const t = localStorage.getItem("access_token");
+    if (t) setToken(t);
   }, []);
 
-  /* ---------- LOAD HISTORY ---------- */
+  /* ========== STREAM EXECUTION ========== */
 
   useEffect(() => {
-    if (!token) return;
+    if (!streaming || !executionId || !token) return;
 
-    fetch(`${process.env.NEXT_PUBLIC_API_BASE}/executions`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-      .then(async (r) => {
-        if (!r.ok) return [];
-        const data = await r.json();
-        return Array.isArray(data) ? data : [];
-      })
-      .then(setHistory)
-      .catch(() => setHistory([]));
-  }, [token, execution]);
+    const poll = setInterval(async () => {
+      const exec = await getExecution(token, executionId);
+      setExecution(exec);
 
-  /* ---------- XP AUTO HIDE ---------- */
+      exec.agents.forEach((a: string) =>
+        setAgentState((p) => ({
+          ...p,
+          [a]: p[a] === "completed" ? "completed" : "running",
+        }))
+      );
 
-  useEffect(() => {
-    if (!xpGained) return;
-    const t = setTimeout(() => setXpGained(null), 3000);
-    return () => clearTimeout(t);
-  }, [xpGained]);
+      if (exec.status === "executed" || exec.status === "active") {
+        exec.agents.forEach((a: string) =>
+          setAgentState((p) => ({ ...p, [a]: "completed" }))
+        );
+        setStreaming(false);
+      }
+    }, 1800);
 
-  /* ---------- AUTH ---------- */
+    return () => clearInterval(poll);
+  }, [streaming, executionId, token]);
+
+  /* ========== HANDLERS ========== */
 
   async function handleLogin() {
     const res = await login(email);
     localStorage.setItem("access_token", res.access_token);
     setToken(res.access_token);
   }
-
-  function handleLogout() {
-    localStorage.clear();
-    setToken(null);
-    setPlan(null);
-    setExecution(null);
-    setAgentStatus({});
-  }
-
-  /* ---------- GOOGLE CAL ---------- */
-
-  function connectGoogleCalendar() {
-    const t = localStorage.getItem("access_token");
-    if (!t) return;
-    window.location.assign(
-      `${process.env.NEXT_PUBLIC_API_BASE}/oauth/google/connect?token=${t}`
-    );
-  }
-
-  /* ---------- ASK ---------- */
 
   async function handleAsk() {
     if (!token || !input) return;
@@ -114,214 +88,114 @@ export default function Home() {
     setExecutionId(res.execution_id);
     setExecution(null);
 
-    const initialStatus: Record<string, string> = {};
-    res.execution_plan.agents.forEach((a: string) => {
-      initialStatus[a] = "pending";
-    });
-    setAgentStatus(initialStatus);
+    const state: Record<string, string> = {};
+    res.execution_plan.agents.forEach((a: string) => (state[a] = "pending"));
+    setAgentState(state);
   }
 
   async function handleApprove() {
     if (!token || !executionId) return;
 
-    setAgentStatus((prev) =>
+    setStreaming(true);
+    setXpBurst(null);
+
+    setAgentState((prev) =>
       Object.fromEntries(Object.keys(prev).map((k) => [k, "running"]))
     );
 
-    await approveExecution(token, executionId);
-    const exec = await getExecution(token, executionId);
-
-    setExecution(exec);
-    setXpGained(exec.xp_gained ?? 5);
-
-    exec.agents.forEach((agent: string, i: number) => {
-      setTimeout(() => {
-        setAgentStatus((prev) => ({ ...prev, [agent]: "completed" }));
-      }, 500 * (i + 1));
-    });
+    const res = await approveExecution(token, executionId);
+    setTimeout(() => setXpBurst(res.xp_gained ?? 15), 300);
   }
 
-  /* ================= UI ================= */
+  /* ================= LOGIN ================= */
 
   if (!token) {
     return (
       <main className="min-h-screen bg-black flex items-center justify-center">
-        <div className="w-[420px] p-8 rounded-2xl bg-slate-950 border border-slate-700 text-slate-200">
+        <div className="w-[420px] bg-slate-950 border border-slate-700 p-8 rounded-xl">
           <h1 className="text-2xl font-bold mb-4">🧠 NeuroFlow OS</h1>
-
           <input
-            className="w-full p-3 rounded bg-slate-900 border border-slate-600 mb-4"
+            className="w-full p-3 mb-4 bg-slate-900 border border-slate-700 rounded"
             placeholder="Email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
           />
-
           <button
             onClick={handleLogin}
-            className="w-full p-3 bg-cyan-400 text-black rounded font-semibold mb-4"
+            className="w-full bg-cyan-400 text-black p-3 rounded font-semibold"
           >
             Login
           </button>
-
-          <GoogleLogin
-            onSuccess={async (cred) => {
-              const res = await fetch(
-                `${process.env.NEXT_PUBLIC_API_BASE}/auth/google`,
-                {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ id_token: cred.credential }),
-                }
-              );
-              const data = await res.json();
-              localStorage.setItem("access_token", data.access_token);
-              setToken(data.access_token);
-            }}
-          />
         </div>
       </main>
     );
   }
 
+  /* ================= MAIN ================= */
+
   return (
     <main className="min-h-screen bg-black text-slate-200 p-10">
-      <button
-        onClick={handleLogout}
-        className="fixed top-4 right-4 bg-red-500 text-black px-4 py-2 rounded"
-      >
-        Logout
-      </button>
-
       <h1 className="text-3xl font-bold mb-2">🧠 NeuroFlow OS</h1>
       <p className="opacity-60 mb-6">
-        An agentic system that executes, monitors, and follows up over time.
+        An agentic system with memory, monitoring, and real-world side effects.
       </p>
 
       <textarea
         className="w-full h-28 p-4 rounded bg-slate-900 border border-slate-700 mb-4"
+        placeholder="Try: Schedule a meeting tomorrow at 5pm"
         value={input}
         onChange={(e) => setInput(e.target.value)}
-        placeholder="Type a command like: Track my fitness progress for 7 days"
       />
 
-      <div className="flex gap-4">
-        <motion.button
-          whileHover={{ scale: 1.03 }}
-          whileTap={{ scale: 0.97 }}
-          onClick={handleAsk}
-          className="bg-cyan-400 text-black px-6 py-3 rounded font-semibold"
-        >
-          Execute
-        </motion.button>
-      </div>
+      <button
+        onClick={handleAsk}
+        className="bg-cyan-400 text-black px-6 py-3 rounded font-semibold"
+      >
+        Execute Command
+      </button>
 
-      {/* ---------- EXECUTION HEADER ---------- */}
+      {/* ================= AGENTS ================= */}
 
       {plan && (
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="mt-10 p-6 rounded-xl bg-slate-900 border border-slate-700"
-        >
-          <h2 className="text-2xl font-bold mb-1">
-            {humanIntent(plan.intent)}
-          </h2>
-          <p className="opacity-70">
-            This execution is monitored over time. You’ll receive reminders and
-            earn XP for progress.
-          </p>
-        </motion.div>
-      )}
-
-      {/* ---------- AGENTS ---------- */}
-
-      <AnimatePresence>
-        {plan && (
-          <motion.div className="mt-10">
-            <h3 className="text-xl mb-4">🤖 Agents Involved</h3>
-
-            <div className="grid grid-cols-2 gap-4">
-              {plan.agents.map((agent: string, i: number) => {
-                const status = agentStatus[agent];
-
-                return (
-                  <motion.div
-                    key={agent}
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: i * 0.1 }}
-                    className={`p-4 rounded-xl bg-slate-900 border ${agentColor(
-                      agent
+        <div className="mt-10">
+          <h3 className="text-xl mb-4">🤖 Agents Executing</h3>
+          <div className="grid grid-cols-2 gap-4">
+            {plan.agents.map((a: string, i: number) => (
+              <motion.div
+                key={a}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: i * 0.1 }}
+                className={`p-4 rounded-xl bg-slate-900 border ${agentStyle(a)}`}
+              >
+                <div className="flex justify-between items-center">
+                  <strong>{a}</strong>
+                  <span
+                    className={`text-xs px-2 py-1 rounded ${statusBadge(
+                      agentState[a]
                     )}`}
                   >
-                    <div className="flex justify-between items-center">
-                      <strong>{agent}</strong>
-                      <span
-                        className={`text-xs px-2 py-1 rounded-full ${
-                          status === "running"
-                            ? "bg-yellow-500 text-black animate-pulse"
-                            : status === "completed"
-                            ? "bg-green-500 text-black"
-                            : "bg-slate-600"
-                        }`}
-                      >
-                        {status}
-                      </span>
-                    </div>
-                  </motion.div>
-                );
-              })}
-            </div>
-
-            <motion.button
-              whileHover={{ scale: 1.04 }}
-              whileTap={{ scale: 0.96 }}
-              onClick={handleApprove}
-              className="mt-6 bg-green-400 text-black px-6 py-3 rounded font-semibold"
-            >
-              Approve & Execute
-            </motion.button>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* ---------- EXECUTION SUMMARY ---------- */}
-
-      {execution && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          className="mt-12 p-6 rounded-xl bg-slate-900 border border-slate-700"
-        >
-          <h3 className="text-lg font-semibold mb-3">
-            📊 Execution Summary
-          </h3>
-
-          <div className="grid grid-cols-3 gap-4 text-sm">
-            <div>
-              <p className="opacity-60">Tokens</p>
-              <p className="font-bold">{execution.estimated_tokens}</p>
-            </div>
-            <div>
-              <p className="opacity-60">Cost</p>
-              <p className="font-bold">${execution.estimated_cost}</p>
-            </div>
-            <div>
-              <p className="opacity-60">XP Earned</p>
-              <p className="font-bold text-green-400">
-                +{execution.xp_gained}
-              </p>
-            </div>
+                    {agentState[a]}
+                  </span>
+                </div>
+              </motion.div>
+            ))}
           </div>
-        </motion.div>
+
+          <button
+            onClick={handleApprove}
+            className="mt-6 bg-green-400 text-black px-6 py-3 rounded font-semibold"
+          >
+            Approve & Execute
+          </button>
+        </div>
       )}
 
-      {/* ---------- TIMELINE ---------- */}
+      {/* ================= TIMELINE ================= */}
 
       {execution && (
         <div className="mt-12">
           <h3 className="text-xl mb-4">🕒 Execution Timeline</h3>
-
           <div className="space-y-3">
             {execution.timeline.map((t: any, i: number) => (
               <motion.div
@@ -329,7 +203,7 @@ export default function Home() {
                 initial={{ opacity: 0, x: -20 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: i * 0.15 }}
-                className="p-3 rounded bg-slate-900 border border-slate-700 text-sm"
+                className="p-3 rounded bg-slate-900 border border-slate-700"
               >
                 {t.message}
               </motion.div>
@@ -338,46 +212,47 @@ export default function Home() {
         </div>
       )}
 
-      {/* ---------- HISTORY ---------- */}
+      {/* ================= ADVANCED ================= */}
 
-      <div className="mt-16">
-        <h3 className="text-xl mb-4">📜 Execution History</h3>
+      {execution && (
+        <div className="mt-10">
+          <button
+            onClick={() => setShowAdvanced((s) => !s)}
+            className="text-sm opacity-60 underline"
+          >
+            {showAdvanced ? "Hide" : "Show"} advanced details
+          </button>
 
-        <div className="space-y-3">
-          {history.map((h, i) => (
-            <motion.div
-              key={i}
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="p-4 bg-slate-900 border border-slate-700 rounded-xl"
-            >
-              <div className="flex justify-between">
-                <span>{humanIntent(h.intent)}</span>
-                <span className="text-sm opacity-60">{h.status}</span>
-              </div>
-              <div className="text-xs opacity-60 mt-2">
-                XP {h.xp_gained ?? 0}
-              </div>
-            </motion.div>
-          ))}
+          <AnimatePresence>
+            {showAdvanced && (
+              <motion.pre
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                exit={{ opacity: 0, height: 0 }}
+                className="mt-4 p-4 bg-slate-950 border border-slate-700 rounded text-xs overflow-auto"
+              >
+                {JSON.stringify(execution, null, 2)}
+              </motion.pre>
+            )}
+          </AnimatePresence>
         </div>
-      </div>
+      )}
 
-      {/* ---------- XP POPUP ---------- */}
+      {/* ================= XP BURST ================= */}
 
-      {xpGained && (
+      {xpBurst && (
         <motion.div
-          initial={{ scale: 0.6, opacity: 0, y: 10 }}
+          initial={{ scale: 0.6, opacity: 0, y: 20 }}
           animate={{ scale: 1.1, opacity: 1, y: -20 }}
-          exit={{ opacity: 0 }}
           className="fixed bottom-6 right-6 bg-gradient-to-r from-green-400 to-emerald-500 text-black px-6 py-4 rounded-2xl font-bold shadow-2xl"
         >
-          ⚡ +{xpGained} XP Earned
+          ⚡ +{xpBurst} XP
         </motion.div>
       )}
     </main>
   );
 }
+
 
 
 
