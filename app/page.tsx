@@ -80,6 +80,15 @@ export default function Home() {
     setToken(res.access_token);
   }
 
+  function handleLogout() {
+    localStorage.removeItem("access_token");
+    setToken(null);
+    setPlan(null);
+    setExecution(null);
+    setExecutionId(null);
+    setAgentState({});
+  }
+
   function connectGoogleCalendar() {
     const t = localStorage.getItem("access_token");
     if (!t) return;
@@ -146,12 +155,20 @@ export default function Home() {
 
   return (
     <main className="min-h-screen bg-black text-slate-200 p-10">
+      {/* LOGOUT */}
+      <button
+        onClick={handleLogout}
+        className="fixed top-6 right-6 bg-red-500 text-black px-4 py-2 rounded-lg font-semibold shadow-lg"
+      >
+        Logout
+      </button>
+
       <h1 className="text-3xl font-bold mb-1">🧠 NeuroFlow OS</h1>
       <p className="opacity-60 mb-4">
         An agentic AI system with memory, monitoring, and real-world actions.
       </p>
 
-      {/* 🔗 GOOGLE CALENDAR */}
+      {/* GOOGLE CALENDAR */}
       <button
         onClick={connectGoogleCalendar}
         className="mb-6 bg-blue-500 text-black px-5 py-2 rounded-lg font-semibold"
@@ -269,6 +286,7 @@ export default function Home() {
     </main>
   );
 }
+
 
 
 
